@@ -1,0 +1,6 @@
+﻿  Assembling Source.asm...
+Source.asm(158): warning A6001: no return from procedure
+Source.asm(119): warning A6004: procedure argument or local not referenced : ExceptionRecord
+Source.asm(119): warning A6004: procedure argument or local not referenced : EstablisherFrame
+Source.asm(119): warning A6004: procedure argument or local not referenced : DispatcherContext
+  RCGX.vcxproj -> C:\Users\Alma Karasik\source\repos\RCGX\Debug\RCGX.exe
