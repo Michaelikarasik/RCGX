@@ -71,10 +71,10 @@ run_debug proc
 		invoke GetStartupInfo,offset startinfo 
 		invoke CreateProcess, offset buffer, NULL, NULL, NULL, FALSE, DEBUG_PROCESS+ DEBUG_ONLY_THIS_PROCESS, NULL, NULL, offset startinfo, offset pi 
 	    mov context.ContextFlags, CONTEXT_ALL
-		mov surv1db.survcontext.ContextFlags, CONTEXT_ALL
-		mov surv2db.survcontext.ContextFlags, CONTEXT_ALL
-		mov surv3db.survcontext.ContextFlags, CONTEXT_ALL
-		mov surv4db.survcontext.ContextFlags, CONTEXT_ALL
+		mov my_survs.surv1db.survcontext.ContextFlags, CONTEXT_ALL
+		mov my_survs.surv2db.survcontext.ContextFlags, CONTEXT_ALL
+		mov my_survs.surv3db.survcontext.ContextFlags, CONTEXT_ALL
+		mov my_survs.surv4db.survcontext.ContextFlags, CONTEXT_ALL
 
 		;only for arena debug
 		invoke VirtualAlloc , 0 , 010200h, MEM_COMMIT, PAGE_EXECUTE_READWRITE
@@ -85,6 +85,7 @@ run_debug proc
 		   invoke GetThreadContext,pi.hThread, offset context
 		   .if DBEvent.dwDebugEventCode==1
 				.if DBEvent.u.Exception.pExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP
+					 custominstructionreset:
 					 or context.regFlag,0100h
 					 mov edi, context.regEdi
 					 .if edi >= arendptr && edi < ediarendptr
@@ -137,18 +138,18 @@ run_debug proc
 					.endif
 
 					survswitch:
-					.if currentsurv == 0
-						switch_survs surv1db, surv2db
-					.elseif currentsurv == 1
-						switch_survs surv2db, surv1db;surv3db
-					.elseif currentsurv == 2
-						switch_survs surv3db, surv4db
-					.elseif currentsurv == 3
-						switch_survs surv4db, surv1db
-					.endif
 					mov al, 2
 					.if currentsurv >= al
 						mov currentsurv, 0
+					.endif
+					.if currentsurv == 0
+						switch_survs my_survs.surv1db, my_survs.surv2db
+					.elseif currentsurv == 1
+						switch_survs my_survs.surv2db, my_survs.surv1db;my_survs.surv3db
+					.elseif currentsurv == 2
+						switch_survs my_survs.surv3db, my_survs.surv4db
+					.elseif currentsurv == 3
+						switch_survs my_survs.surv4db, my_survs.surv1db
 					.endif
 
 					 invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId,DBG_CONTINUE 
@@ -207,17 +208,16 @@ run_debug proc
 					invoke WaitForDebugEvent, offset DBEvent, INFINITE 
 					.if DBEvent.u.Exception.pExceptionRecord.ExceptionCode==EXCEPTION_BREAKPOINT
 						.if currentsurv == 0
-							setupcontext(surv1db)
+							setupcontext(my_survs.surv1db)
 							inc currentsurv
 						.elseif currentsurv == 1
-							setupcontext(surv2db)								
+							setupcontext(my_survs.surv2db)								
 							inc currentsurv
-							invoke ReadProcessMemory, pi.hProcess, esparstartptr, debugarstartptr, 010007h, NULL
 						.elseif currentsurv == 2
-							setupcontext(surv3db)
+							setupcontext(my_survs.surv3db)
 							inc currentsurv
 						.elseif currentsurv == 3
-							setupcontext(surv4db)
+							setupcontext(my_survs.surv4db)
 							inc currentsurv	
 						.endif
 
@@ -238,8 +238,8 @@ run_debug proc
 					invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId,DBG_CONTINUE 
 					invoke WaitForDebugEvent, offset DBEvent, INFINITE 
 					.if DBEvent.u.Exception.pExceptionRecord.ExceptionCode==EXCEPTION_BREAKPOINT
-						or surv1db.survcontext.regFlag, 0100h
-						invoke SetThreadContext,pi.hThread, offset surv1db.survcontext
+						or my_survs.surv1db.survcontext.regFlag, 0100h
+						invoke SetThreadContext,pi.hThread, offset my_survs.surv1db.survcontext
 						mov ecx, postarcheckbuf
 						push ecx
 						mov dword ptr ebx, postarcheckbuf

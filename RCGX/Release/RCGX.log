@@ -1,14 +1,11 @@
 ﻿  Assembling Source.asm...
 \masm32\include\masm32rt.inc(33): warning A4011: multiple .MODEL directives found : .MODEL ignored
 Source.asm(191): warning A6001: no return from procedure
-data.inc(64): warning A4014: instructions and initialized data not supported in BSS segments
-data.inc(65): warning A4014: instructions and initialized data not supported in BSS segments
-data.inc(66): warning A4014: instructions and initialized data not supported in BSS segments
-data.inc(67): warning A4014: instructions and initialized data not supported in BSS segments
 data.inc(71): warning A4014: instructions and initialized data not supported in BSS segments
 data.inc(72): warning A4014: instructions and initialized data not supported in BSS segments
 data.inc(73): warning A4014: instructions and initialized data not supported in BSS segments
 data.inc(74): warning A4014: instructions and initialized data not supported in BSS segments
+data.inc(78): warning A4014: instructions and initialized data not supported in BSS segments
 Source.asm(191): warning A6004: procedure argument or local not referenced : ExceptionRecord
 Source.asm(191): warning A6004: procedure argument or local not referenced : EstablisherFrame
 Source.asm(191): warning A6004: procedure argument or local not referenced : DispatcherContext

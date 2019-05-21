@@ -33,14 +33,20 @@ seh struct
 seh ends
 
 debugstruct struct
+	survcontext CONTEXT<>
 	isdead dword 0
 	stackstart dword ?
 	stackend dword ?
 	exstart dword ?
 	exend dword ?
-	survcontext CONTEXT<>
 debugstruct ends
 
+all_survs struct
+	surv1db debugstruct<>
+	surv2db debugstruct<>
+	surv3db debugstruct<>
+	surv4db debugstruct<>
+all_survs ends
 .data
 
 allocedmemsize equ 020100h
@@ -50,6 +56,8 @@ ardif equ 10000h
 stacksize equ 01000h
 extrasegsize equ 01000h
 
+max_survs equ 4
+
 arenaset db "arenaset", 0
 newsurvset db "newsurvset", 0
 startgame db "startgame", 0
@@ -57,7 +65,6 @@ startgame db "startgame", 0
 findarenamsg db "findarena", 0
 
 currentsurv byte ?
-max_survs byte 4
 intcheckbuf word ?
 
 .data?
@@ -68,7 +75,4 @@ surv4snap snapstruct<>
 
 structured_handler seh<>
 
-surv1db debugstruct<>
-surv2db debugstruct<>
-surv3db debugstruct<>
-surv4db debugstruct<>
+my_survs all_survs<>
