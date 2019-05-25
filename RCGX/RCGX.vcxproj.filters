@@ -15,19 +15,22 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <MASM Include="Source.asm">
-      <Filter>Source Files</Filter>
-    </MASM>
-  </ItemGroup>
-  <ItemGroup>
     <None Include="data.inc">
       <Filter>Header Files</Filter>
     </None>
     <None Include="mylibs.inc">
       <Filter>Header Files</Filter>
     </None>
+    <None Include="drd.inc">
+      <Filter>Header Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Library Include="decoderlib.lib" />
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="setupsource.asm">
+      <Filter>Source Files</Filter>
+    </MASM>
   </ItemGroup>
 </Project>

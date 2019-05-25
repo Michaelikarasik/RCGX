@@ -1,13 +1,16 @@
-﻿  Assembling Source.asm...
+﻿  Assembling setupsource.asm...
 \masm32\include\masm32rt.inc(33): warning A4011: multiple .MODEL directives found : .MODEL ignored
-Source.asm(191): warning A6001: no return from procedure
-data.inc(71): warning A4014: instructions and initialized data not supported in BSS segments
-data.inc(72): warning A4014: instructions and initialized data not supported in BSS segments
-data.inc(73): warning A4014: instructions and initialized data not supported in BSS segments
-data.inc(74): warning A4014: instructions and initialized data not supported in BSS segments
-data.inc(78): warning A4014: instructions and initialized data not supported in BSS segments
-Source.asm(191): warning A6004: procedure argument or local not referenced : ExceptionRecord
-Source.asm(191): warning A6004: procedure argument or local not referenced : EstablisherFrame
-Source.asm(191): warning A6004: procedure argument or local not referenced : DispatcherContext
-  LINK : /LTCG specified but no code generation required; remove /LTCG from the link command line to improve linker performance
+setupsource.asm(186): warning A6001: no return from procedure
+data.inc(81): warning A4014: instructions and initialized data not supported in BSS segments
+data.inc(82): warning A4014: instructions and initialized data not supported in BSS segments
+data.inc(83): warning A4014: instructions and initialized data not supported in BSS segments
+data.inc(84): warning A4014: instructions and initialized data not supported in BSS segments
+data.inc(88): warning A4014: instructions and initialized data not supported in BSS segments
+setupsource.asm(186): warning A6004: procedure argument or local not referenced : ExceptionRecord
+setupsource.asm(186): warning A6004: procedure argument or local not referenced : EstablisherFrame
+setupsource.asm(186): warning A6004: procedure argument or local not referenced : DispatcherContext
+  Generating code
+  All 28 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
+  Finished generating code
+drd.lib(drd.obj) : warning LNK4099: PDB 'vc120.pdb' was not found with 'drd.lib(drd.obj)' or at 'C:\Users\Alma Karasik\source\repos\RCGX\Release\vc120.pdb'; linking object as if no debug info
   RCGX.vcxproj -> C:\Users\Alma Karasik\source\repos\RCGX\Release\RCGX.exe

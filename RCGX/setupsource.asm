@@ -12,14 +12,13 @@ includelib \masm32\lib\msvcrt.lib
 include \masm32\include\masm32rt.inc
 include data.inc
 include mylibs.inc
+includelib drd.lib
+include drd.inc
 
 .686
 .data
 
-trashpointer dword ?
-
 arptr DWORD ?
-startofallocptr dword ?
 coderunptr DWORD ?
 codewriteptr dword ?
 
@@ -32,10 +31,6 @@ surv1handle DWORD ?
 thread_run_ptr dword ?
 
 exception_handler dword ?
-
-msg  db "Hello, World!", 0
-buf dword ?
-stdout dword ?
 
 .code
 ASSUME FS:NOTHING
@@ -211,8 +206,7 @@ handle_exception endp
 
 thread_setup proc survsnap:dword
 	invoke OutputDebugString, offset newsurvset
-	invoke WriteFile, stdout, offset msg, 9, offset buf, NULL
-	invoke VirtualAlloc, 0, 01000h + stacksize + 01000h + extrasegsize + 01000h, MEM_COMMIT, PAGE_READWRITE
+	invoke VirtualAlloc, 0, exandstackallocsize, MEM_COMMIT, PAGE_READWRITE
 	mov edi, eax
 	add edi, 01000h
 	push eax
@@ -256,27 +250,43 @@ new_surv_loc proc
 	mov ebx, surv1snap.survptr
 	sub eax, ebx
 	sub ebx, edx
+	neg ebx
 
 	mov ecx, edx
 	mov edi, surv2snap.survptr
 	sub ecx, edi
 	sub edi, edx
-	.if eax < 512 || ebx < 512 || edi < 512 || ecx < 512
-		jmp retry
-	.endif
+	neg edi
+
+	cmp eax, 512
+	jl retry
+	cmp ebx, 512
+	jl retry
+	cmp edx, 512
+	jl retry
+	cmp ecx, 512
+	jl retry
 
 	mov eax, edx
 	mov ebx, surv3snap.survptr
 	sub eax, ebx
 	sub ebx, edx
+	neg ebx
 
 	mov ecx, edx
 	mov edi, surv4snap.survptr
 	sub ecx, edi
 	sub edi, edx
-	.if eax < 512 || ebx < 512 || edi < 512 || ecx < 512
-		jmp retry
-	.endif
+	neg edi
+
+	cmp eax, 512
+	jl retry
+	cmp ebx, 512
+	jl retry
+	cmp edx, 512
+	jl retry
+	cmp ecx, 512
+	jl retry
 
 	mov eax, edx
 	ret
@@ -289,51 +299,46 @@ write_surv macro writeloc, filename
 endm
 
 main proc
-	invoke GetStdHandle, STD_OUTPUT_HANDLE
-	mov stdout, eax
-	invoke WriteFile, stdout, offset msg, 3, offset buf, NULL
 
 	;allocate memory for the game
 	invoke OutputDebugString, offset arenaset
 	invoke VirtualAlloc , 0 , allocedmemsize, MEM_COMMIT, PAGE_EXECUTE_READWRITE
 	mov startofallocptr, eax
+	mov ebx, eax
 	add eax, ardif
 	xor ax,ax
 	mov arptr, eax
 	db 0cch
-	mov exception_handler, offset structured_handler
 
 	;reset the arenas
 	invoke reset_armain
 	
 	invoke new_surv_loc
 	mov surv1snap.survptr, eax
-	write_surv surv1snap.survptr, "surv1"
+	write_surv surv1snap.survptr, "surv1-1"
 
 	invoke new_surv_loc
 	mov surv2snap.survptr, eax
-	write_surv surv2snap.survptr, "surv2"
-
-	invoke new_surv_loc
-	mov surv3snap.survptr, eax
-	write_surv surv3snap.survptr, "surv3"
-
-	invoke new_surv_loc
-	mov surv4snap.survptr, eax
-	write_surv surv4snap.survptr, "surv4"
+	write_surv surv2snap.survptr, "surv2-1"
 
 	invoke thread_setup, offset surv1snap 
 	invoke thread_setup, offset surv2snap 
-	invoke thread_setup, offset surv3snap 
-	invoke thread_setup, offset surv4snap 
+
+	;invoke new_surv_loc
+	;mov surv3snap.survptr, eax
+	;write_surv surv3snap.survptr, "surv3"
+	;invoke thread_setup, offset surv3snap 
+	;
+	;invoke new_surv_loc
+	;mov surv4snap.survptr, eax
+	;write_surv surv4snap.survptr, "surv4"
+	;invoke thread_setup, offset surv4snap 
 
 	mov snapptr, offset surv1snap
 
 	invoke OutputDebugString, offset startgame
 	db 0cch
 
-	mov eax, surv2snap.survptr
-	jmp eax
 	ret
 main endp
 end main

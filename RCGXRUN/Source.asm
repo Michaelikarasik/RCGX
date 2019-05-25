@@ -29,10 +29,17 @@ debugarstartptr dword ?
 survcontextset dword 0
 
 postarcheckbuf dword 0cccccccch
+postarlaststate dword 0cccccccch
+prearlaststate dword 0cccccccch
 
 isgame db 0
 
+currentsurv byte ?
+currentsurvlp dword my_survs.surv1db
+
 debugstringbuf dword ?
+
+livingsurvnum byte max_survs
 
 AppName db "RCGX",0 
 ofn OPENFILENAME <> 
@@ -57,6 +64,7 @@ ProcessId dd ?
 ThreadId dd ? 
 align dword 
 context CONTEXT <> 
+RCGXSetupStartContext CONTEXT<>
 
 .code
 
@@ -70,20 +78,28 @@ run_debug proc
 	.if eax==TRUE 
 		invoke GetStartupInfo,offset startinfo 
 		invoke CreateProcess, offset buffer, NULL, NULL, NULL, FALSE, DEBUG_PROCESS+ DEBUG_ONLY_THIS_PROCESS, NULL, NULL, offset startinfo, offset pi 
-	    mov context.ContextFlags, CONTEXT_ALL
-		mov my_survs.surv1db.survcontext.ContextFlags, CONTEXT_ALL
-		mov my_survs.surv2db.survcontext.ContextFlags, CONTEXT_ALL
-		mov my_survs.surv3db.survcontext.ContextFlags, CONTEXT_ALL
-		mov my_survs.surv4db.survcontext.ContextFlags, CONTEXT_ALL
 
 		;only for arena debug
 		invoke VirtualAlloc , 0 , 010200h, MEM_COMMIT, PAGE_EXECUTE_READWRITE
 		mov debugarstartptr, eax
 
+		PROCESSALREADYOPENED:
+		mov isgame, 0
+
+	    mov context.ContextFlags, CONTEXT_ALL
+		mov RCGXSetupStartContext.ContextFlags, CONTEXT_CONTROL
+
+		mov ecx, max_survs
+		mov eax, offset my_survs.surv1db.survcontext
+		SURVCONTEXTSETLOOP:
+		mov [eax.debugstruct].survcontext.ContextFlags, CONTEXT_ALL
+		add eax, SIZEOF debugstruct
+		loop SURVCONTEXTSETLOOP
+				   invoke GetThreadContext,pi.hThread, offset context
 		.while TRUE
 		   invoke WaitForDebugEvent, offset DBEvent, INFINITE
 		   invoke GetThreadContext,pi.hThread, offset context
-		   .if DBEvent.dwDebugEventCode==1
+		   .if DBEvent.dwDebugEventCode==1 && isgame != 0
 				.if DBEvent.u.Exception.pExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP
 					 custominstructionreset:
 					 or context.regFlag,0100h
@@ -101,36 +117,35 @@ run_debug proc
 					 .endif
 
 					invoke ReadProcessMemory, pi.hProcess, arendptr, offset postarcheckbuf, 4, NULL
-					pop ebx
+					mov ebx, postarlaststate
 					.if postarcheckbuf != ebx
 						invoke WriteProcessMemory, pi.hProcess, arptr, offset postarcheckbuf, 4, NULL
 						mov ebx, postarcheckbuf
+						mov postarlaststate, ebx
 					.else
 						invoke ReadProcessMemory, pi.hProcess, arptr, offset postarcheckbuf, 4, NULL
 						.if postarcheckbuf != ebx
 							invoke WriteProcessMemory, pi.hProcess, arendptr, offset postarcheckbuf, 4, NULL
 							mov ebx, postarcheckbuf
+							mov postarlaststate, ebx
 						.endif
 					.endif
-					pop eax
-					push ebx
-					push eax
+
+					mov ebx, prearlaststate
 
 					invoke ReadProcessMemory, pi.hProcess, esparendptr, offset postarcheckbuf, 4, NULL
-					pop ebx
 					.if postarcheckbuf != ebx
 						invoke WriteProcessMemory, pi.hProcess, esparstartptr, offset postarcheckbuf, 4, NULL
 						mov ebx, postarcheckbuf
+						mov prearlaststate, ebx
 					.else
 						invoke ReadProcessMemory, pi.hProcess, esparstartptr, offset postarcheckbuf, 4, NULL
 						.if postarcheckbuf != ebx
 							invoke WriteProcessMemory, pi.hProcess, esparendptr, offset postarcheckbuf, 4, NULL
 							mov ebx, postarcheckbuf
+							mov prearlaststate, ebx
 						.endif
 					.endif
-					pop eax
-					push ebx
-					push eax
 				
 					mov eax, context.regEsp
 					.if eax < arptr && eax >= esparstartptr
@@ -138,23 +153,24 @@ run_debug proc
 					.endif
 
 					survswitch:
-					mov al, 2
-					.if currentsurv >= al
-						mov currentsurv, 0
-					.endif
-					.if currentsurv == 0
-						switch_survs my_survs.surv1db, my_survs.surv2db
-					.elseif currentsurv == 1
-						switch_survs my_survs.surv2db, my_survs.surv1db;my_survs.surv3db
-					.elseif currentsurv == 2
-						switch_survs my_survs.surv3db, my_survs.surv4db
-					.elseif currentsurv == 3
-						switch_survs my_survs.surv4db, my_survs.surv1db
-					.endif
+					;check if currentsurvlp is above the max surv and reset it accordingly
+					mov eax, currentsurvlp
+					cmp eax, offset my_survs + (sizeof debugstruct) * max_survs
+					jl NOTABOVEMAXSURV
+					mov currentsurvlp, offset my_survs
+
+					NOTABOVEMAXSURV:
+					switch_survs currentsurvlp
 
 					 invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId,DBG_CONTINUE 
 					 invoke ReadProcessMemory, pi.hProcess, esparstartptr, debugarstartptr, 010007h, NULL
 					 .continue 
+				
+				.elseif isgame == 1
+					mov ebx, currentsurvlp
+					mov [ebx.debugstruct].isdead, 1
+					dec livingsurvnum
+					jmp survswitch
 
 				.elseif DBEvent.u.Exception.pExceptionRecord.ExceptionCode==EXCEPTION_BREAKPOINT
 					nop
@@ -172,8 +188,8 @@ run_debug proc
 
 			.elseif DBEvent.dwDebugEventCode==OUTPUT_DEBUG_STRING_EVENT
 				invoke ReadProcessMemory, pi.hProcess, DBEvent.u.DebugString.lpDebugStringData, offset debugstringbuf, 4, NULL
-				xor ecx, ecx
-				mov cx, 4
+
+				mov ecx, 4
 				mov edi, offset debugstringbuf
 				mov esi, offset arenaset
 				repe cmpsb
@@ -182,6 +198,8 @@ run_debug proc
 					invoke WaitForDebugEvent, offset DBEvent, INFINITE 
 					.if DBEvent.u.Exception.pExceptionRecord.ExceptionCode==EXCEPTION_BREAKPOINT
 						invoke GetThreadContext,pi.hThread, offset context
+						mov ebx, context.regEbx
+						mov startofallocptr, ebx
 						mov eax, context.regEax
 						mov arptr, eax
 						sub eax, 4
@@ -197,37 +215,22 @@ run_debug proc
 						add eax, 252
 						mov eipendptr, eax
 					.endif
+					jmp FOUNDMESSAGE
 				.endif
 
 				mov cx, 4
 				mov edi, offset debugstringbuf
 				mov esi, offset newsurvset
 				repe cmpsb
-				.if ecx == 0 ;if debug string is survset wait until it's set and put it in context
+ 				.if ecx == 0 ;if debug string is survset wait until it's set and put it in context
 					invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId,DBG_CONTINUE 
 					invoke WaitForDebugEvent, offset DBEvent, INFINITE 
 					.if DBEvent.u.Exception.pExceptionRecord.ExceptionCode==EXCEPTION_BREAKPOINT
-						.if currentsurv == 0
-							setupcontext(my_survs.surv1db)
-							inc currentsurv
-						.elseif currentsurv == 1
-							setupcontext(my_survs.surv2db)								
-							inc currentsurv
-						.elseif currentsurv == 2
-							setupcontext(my_survs.surv3db)
-							inc currentsurv
-						.elseif currentsurv == 3
-							setupcontext(my_survs.surv4db)
-							inc currentsurv	
-						.endif
-
-						mov al, max_survs
-						.if currentsurv >= al
-							mov currentsurv, 0
-						.endif
-
+						setupcontext(currentsurvlp)
+						add currentsurvlp, sizeof debugstruct
 					.endif
 					inc survcontextset
+					jmp FOUNDMESSAGE
 				.endif
 
 				mov cx, 4
@@ -244,10 +247,14 @@ run_debug proc
 						push ecx
 						mov dword ptr ebx, postarcheckbuf
 						push ebx
-						mov currentsurv, 0
+						mov currentsurvlp, offset my_survs.surv1db
+						mov isgame, 1
 						invoke ReadProcessMemory, pi.hProcess, esparstartptr, debugarstartptr, 010007h, NULL
 					.endif
+					jmp FOUNDMESSAGE
 				.endif
+
+				FOUNDMESSAGE:
 				invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId, DBG_CONTINUE 
                 .continue 
 			.elseif DBEvent.dwDebugEventCode==EXIT_PROCESS_DEBUG_EVENT 
@@ -266,6 +273,23 @@ run_debug proc
 		invoke CloseHandle,pi.hThread 
 	.endif 
 	invoke ExitProcess, 0 
+
+	DOWIN:
+;	invoke SetThreadContext,pi.hThread, offset RCGXSetupStartContext
+	mov ebx, currentsurvlp
+	inc [ebx.debugstruct].wincount
+	mov ebx, offset my_survs.surv1db.survcontext
+	mov ecx, max_survs
+	SEGSFREELOOP:
+	mov eax, [ebx.debugstruct].segallocstart
+	push ecx
+	invoke VirtualFreeEx, pi.hProcess, eax, 0, MEM_RELEASE
+	pop ecx
+	add ebx, sizeof debugstruct
+	loop SEGSFREELOOP
+
+	invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId,DBG_CONTINUE 
+	jmp PROCESSALREADYOPENED
 run_debug endp
 
 
