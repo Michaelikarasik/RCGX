@@ -1,9 +1,53 @@
-setupcontext macro survdblp
+kill_surv macro survdblp
+	local deathcheckloop
+	mov ebx, survdblp
+	mov [ebx.debugstruct].isdead, 1
+	dec livingsurvnum
+	mov eax, [ebx.debugstruct].afptr
+	xor deathchart, eax
+	mov [ebx.debugstruct].afptr, 0
 
+	mov ecx, max_survs
+	mov ebx, survlpinit
+
+	deathcheckloop:
+	mov eax, [ebx.debugstruct].afptr
+	or deathchart, eax
+	add ebx, sizeof debugstruct
+	loop deathcheckloop
+endm
+
+UpdateMemoryChanges macro 
+	local cmploop, notdrawing
+	cmp isdrawing, 0
+	jz notdrawing
+
+	invoke ReadProcessMemory, pi.hProcess, esparstartptr, debugarcheckptr, 010007h, NULL
+	mov esi, debugarcheckptr
+	mov edi, debugarstartptr
+	mov ecx, 010007
+
+	cmploop:
+	repe cmpsb
+	;code for changed
+	test ecx, ecx
+	jnz cmploop
+
+	mov esi, debugarcheckptr
+	mov edi, debugarstartptr
+	mov ecx, 010007h
+	rep movsb
+
+	notdrawing:
+endm
+
+setupcontext macro survdblp
+		local shiftloop
 		mov ebx, survdblp
 
 		;get the process context after surv setup
 		invoke GetThreadContext,pi.hThread, addr [ebx.debugstruct].survcontext
+		invoke GetLastError
 
 		;get surv starting location
 		mov eax, [ebx.debugstruct].survcontext.regEax
@@ -24,43 +68,38 @@ setupcontext macro survdblp
 		sub eax, 02000h
 		mov [ebx.debugstruct].segallocstart, eax
 
+		;get survivor's affiliation num
+		mov eax, [ebx.debugstruct].survcontext.regEbx
+		mov [ebx.debugstruct].affiliation, eax
+		mov [ebx.debugstruct].survcontext.regEbx, 0
+
+		mov eax, 1
+		mov ecx, [ebx.debugstruct].affiliation
+		shiftloop:
+		sal eax, 1
+		loop shiftloop
+		or deathchart, eax
+		mov [ebx.debugstruct].afptr, eax
+
 		mov [ebx.debugstruct].heavybombs, 2
-		mov [ebx.debugstruct]. smartbombs, 1
+		mov [ebx.debugstruct].smartbombs, 1
+		mov [ebx.debugstruct].isdead, 0
 
 		or [ebx.debugstruct].survcontext.regFlag, 100h	
 
 endm
 
-protectSurvSegs macro survdblp
+protectSurvSegs macro lastsurvdblp, nextsurvdblp
 	local PROTECTLOOP, NOTMYSURV, DOTHEPROTECT
-	mov edx, survdblp
+	push nextsurvdblp
+	push lastsurvdblp
+	pop ebx
+	invoke VirtualProtectEx, pi.hProcess, [ebx.debugstruct].stackstart, 0fffh, PAGE_NOACCESS, trashpointer
+	invoke VirtualProtectEx, pi.hProcess, [ebx.debugstruct].exstart, 0fffh, PAGE_NOACCESS, trashpointer
 
-	mov ecx, max_survs
-	mov ebx, offset my_survs.surv1db
-	PROTECTLOOP:
-	cmp ebx, edx
-	jne NOTMYSURV
-
-	;make current surv's segs' protect rights PAGE_READWRITE
-	mov eax, 04h
-	jmp DOTHEPROTECT
-
-	NOTMYSURV: 
-	;make survs that aren't the current surv's segs' protect rights PAGE_NOACESS
-	mov eax, 01h
-
-	DOTHEPROTECT:
-	push ecx
-	push edx
-	push eax
-	invoke VirtualProtectEx, pi.hProcess, [ebx.debugstruct].stackstart, 0fffh, eax, trashpointer
-	mov eax, [esp]
-	invoke VirtualProtectEx, pi.hProcess, [ebx.debugstruct].exstart, 0fffh, eax, trashpointer
-	pop eax
-	pop edx
-	pop ecx
-	add eax, SIZEOF debugstruct
-	loop PROTECTLOOP
+	pop ebx
+	invoke VirtualProtectEx, pi.hProcess, [ebx.debugstruct].stackstart, 0fffh, PAGE_READWRITE, trashpointer
+	invoke VirtualProtectEx, pi.hProcess, [ebx.debugstruct].exstart, 0fffh, PAGE_READWRITE, trashpointer
 endm
 
 heavyBombEdiArSectioning macro survdb
@@ -276,7 +315,7 @@ handle_ints_new macro survdblp
 			
 		.else
 			ILLEGALINSTRUCTION:
-			mov [ebx.debugstruct].isdead, 1
+			kill_surv ebx
 		.endif
 
 		BOMBINGDONE:	
@@ -426,43 +465,71 @@ endm
 ;endm
 
 switch_survs macro lastsurvlp
-	local notdead, NOTABOVEMAXSURV
+	local notdead, NOTABOVEMAXSURV, CHANGETONEXTSURV
 	mov ebx, lastsurvlp
+	cmp [ebx.debugstruct].isdead, 0
+	jne CHANGETONEXTSURV
 	mov esi, offset context
 	mov edi, ebx
 	add edi, debugstruct.survcontext
 	mov ecx, sizeof CONTEXT
 	rep movsb
 
+	CHANGETONEXTSURV:
 	add ebx, sizeof debugstruct
 	cmp ebx, offset my_survs + (sizeof debugstruct) * max_survs
 	jl NOTABOVEMAXSURV
 	mov ebx, offset my_survs
 	NOTABOVEMAXSURV:
+	push ebx
+	protectSurvSegs currentsurvlp, ebx
+	pop ebx
 	mov currentsurvlp, ebx
 
 	cmp [ebx.debugstruct].isdead, 0
 	jne survswitch
 
-	cmp livingsurvnum, 1
+	mov eax, [ebx.debugstruct].afptr
+	cmp deathchart, eax
 	je DOWIN
 
-	protectSurvSegs(currentsurvlp)
 	handle_ints_new(currentsurvlp)
 
 	mov ebx, currentsurvlp
 	invoke SetThreadContext,pi.hThread, addr [ebx.debugstruct].survcontext 
 endm
 
-;switch_survs MACRO lastsurv, nextsurv
-;	mov esi, offset context
-;	mov edi, offset lastsurv.survcontext
-;	mov ecx, SIZEOF CONTEXT
-;	rep movsb
-;	inc currentsurv
-;	cmp nextsurv.isdead, 0
-;	jne survswitch
-;
-;	handle_ints_new(offset nextsurv)
-;	invoke SetThreadContext,pi.hThread, offset nextsurv.survcontext 
-;endm
+endOfRoundPoints macro
+	local WINPOINTCHECKLOOP, SURVISDEAD1, SURVISDEAD2
+	xor ebx, ebx ;ebx will be the counter for alive players
+	mov eax, 100 ;will divide ax by bx to get points for each player
+	mov ecx, max_survs
+	mov edx, survlpinit
+	
+	WINPOINTCHECKLOOP:
+	dec ecx
+	cmp [edx.debugstruct].isdead, 0
+	jnz SURVISDEAD1
+	inc ebx
+	SURVISDEAD1:
+	add edx, sizeof debugstruct
+	test ecx, ecx
+	jnz WINPOINTCHECKLOOP
+
+	xor edx, edx
+	test bl, bl
+	jz SURVISDEAD2
+	div bl
+
+	mov ecx, max_survs
+	mov edx, survlpinit
+	WINPOINTGIVELOOP:
+	dec ecx
+	cmp [edx.debugstruct].isdead, 0
+	jnz SURVISDEAD2
+	add [edx.debugstruct].wincount, eax
+	SURVISDEAD2:
+	add edx, sizeof debugstruct
+	test ecx, ecx
+	jnz WINPOINTGIVELOOP
+endm

@@ -25,6 +25,7 @@ snapstruct struct
 	ediptr dword ?
 	survptr dword 0
 	stackptr dword ?
+	exstart dword ?
 snapstruct ends
 
 seh struct
@@ -43,13 +44,26 @@ debugstruct struct
 	heavybombs dword 2
 	smartbombs dword 1
 	wincount dword 0
+	affiliation dword ?
+	afptr dword ?
 debugstruct ends
+
+all_snaps struct
+	surv1snap snapstruct<>
+	surv2snap snapstruct<>
+	surv3snap snapstruct<>
+	surv4snap snapstruct<>
+all_snaps ends
 
 all_survs struct
 	surv1db debugstruct<>
 	surv2db debugstruct<>
 	surv3db debugstruct<>
 	surv4db debugstruct<>
+	surv5db debugstruct<>
+	surv6db debugstruct<>
+	surv7db debugstruct<>
+	surv8db debugstruct<>
 all_survs ends
 
 .data
@@ -61,7 +75,7 @@ ardif equ 10000h
 stacksize equ 01000h
 extrasegsize equ 01000h
 
-max_survs equ 2
+max_survs equ 4
 
 exandstackallocsize equ 01000h + stacksize + 01000h + extrasegsize + 01000h
 
@@ -77,12 +91,11 @@ trashpointer dword ?
 
 startofallocptr dword ?
 
+isdrawing dword 1
+
 .data?
-surv1snap snapstruct<>
-surv2snap snapstruct<>
-surv3snap snapstruct<>
-surv4snap snapstruct<>
 
 structured_handler seh<>
 
+my_snaps all_snaps<>
 my_survs all_survs<>

@@ -25,6 +25,7 @@ esparendptr dword ?
 ediarendptr dword ?
 
 debugarstartptr dword ?
+debugarcheckptr dword ?
 
 survcontextset dword 0
 
@@ -34,12 +35,18 @@ prearlaststate dword 0cccccccch
 
 isgame db 0
 
+turncount dword 0
+gamecount dword 0
+
 currentsurv byte ?
-currentsurvlp dword my_survs.surv1db
+survlpinit dword my_survs.surv1db.survcontext
+currentsurvlp dword my_survs.surv1db.survcontext
 
 debugstringbuf dword ?
 
 livingsurvnum byte max_survs
+
+deathchart dword 0
 
 AppName db "RCGX",0 
 ofn OPENFILENAME <> 
@@ -53,7 +60,6 @@ ProcessInfo db "File Handle: %lx ",0dh,0Ah
             db "Thread Handle: %lx",0Dh,0Ah 
             db "Image Base: %lx",0Dh,0Ah 
             db "Start offsetess: %lx",0 
-
 
 .data? 
 buffer db 512 dup(?) 
@@ -80,8 +86,10 @@ run_debug proc
 		invoke CreateProcess, offset buffer, NULL, NULL, NULL, FALSE, DEBUG_PROCESS+ DEBUG_ONLY_THIS_PROCESS, NULL, NULL, offset startinfo, offset pi 
 
 		;only for arena debug
-		invoke VirtualAlloc , 0 , 010200h, MEM_COMMIT, PAGE_EXECUTE_READWRITE
+		invoke VirtualAlloc , 0 , 010007h * 2, MEM_COMMIT, PAGE_EXECUTE_READWRITE
 		mov debugarstartptr, eax
+		add eax, 010007h
+		mov debugarcheckptr, eax
 
 		PROCESSALREADYOPENED:
 		mov isgame, 0
@@ -95,7 +103,7 @@ run_debug proc
 		mov [eax.debugstruct].survcontext.ContextFlags, CONTEXT_ALL
 		add eax, SIZEOF debugstruct
 		loop SURVCONTEXTSETLOOP
-				   invoke GetThreadContext,pi.hThread, offset context
+		invoke GetThreadContext,pi.hThread, offset context
 		.while TRUE
 		   invoke WaitForDebugEvent, offset DBEvent, INFINITE
 		   invoke GetThreadContext,pi.hThread, offset context
@@ -153,8 +161,13 @@ run_debug proc
 					.endif
 
 					survswitch:
-					;check if currentsurvlp is above the max surv and reset it accordingly
 					mov eax, currentsurvlp
+					;check if start of new turn
+					inc turncount
+					cmp turncount, 200000 * max_survs
+					jae DOWIN
+
+					;check if currentsurvlp is above the max surv and reset it accordingly
 					cmp eax, offset my_survs + (sizeof debugstruct) * max_survs
 					jl NOTABOVEMAXSURV
 					mov currentsurvlp, offset my_survs
@@ -163,13 +176,12 @@ run_debug proc
 					switch_survs currentsurvlp
 
 					 invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId,DBG_CONTINUE 
-					 invoke ReadProcessMemory, pi.hProcess, esparstartptr, debugarstartptr, 010007h, NULL
+					 UpdateMemoryChanges
 					 .continue 
 				
 				.elseif isgame == 1
 					mov ebx, currentsurvlp
-					mov [ebx.debugstruct].isdead, 1
-					dec livingsurvnum
+					kill_surv ebx
 					jmp survswitch
 
 				.elseif DBEvent.u.Exception.pExceptionRecord.ExceptionCode==EXCEPTION_BREAKPOINT
@@ -189,6 +201,19 @@ run_debug proc
 			.elseif DBEvent.dwDebugEventCode==OUTPUT_DEBUG_STRING_EVENT
 				invoke ReadProcessMemory, pi.hProcess, DBEvent.u.DebugString.lpDebugStringData, offset debugstringbuf, 4, NULL
 
+				mov ecx, 4
+				mov edi, offset debugstringbuf
+				mov esi, offset setupstartstate
+				repe cmpsb
+				.if ecx == 0
+					invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId,DBG_CONTINUE 
+					invoke WaitForDebugEvent, offset DBEvent, INFINITE 
+					.if DBEvent.u.Exception.pExceptionRecord.ExceptionCode==EXCEPTION_BREAKPOINT
+						invoke GetThreadContext,pi.hThread, offset RCGXSetupStartContext
+					.endif
+				.endif
+
+				arenasetupstringcheck:
 				mov ecx, 4
 				mov edi, offset debugstringbuf
 				mov esi, offset arenaset
@@ -249,6 +274,8 @@ run_debug proc
 						push ebx
 						mov currentsurvlp, offset my_survs.surv1db
 						mov isgame, 1
+						mov eax, max_survs
+						mov livingsurvnum, al
 						invoke ReadProcessMemory, pi.hProcess, esparstartptr, debugarstartptr, 010007h, NULL
 					.endif
 					jmp FOUNDMESSAGE
@@ -275,11 +302,13 @@ run_debug proc
 	invoke ExitProcess, 0 
 
 	DOWIN:
-;	invoke SetThreadContext,pi.hThread, offset RCGXSetupStartContext
-	mov ebx, currentsurvlp
-	inc [ebx.debugstruct].wincount
-	mov ebx, offset my_survs.surv1db.survcontext
+ 	invoke SetThreadContext,pi.hThread, offset RCGXSetupStartContext
+	endOfRoundPoints ;add points to each player
+
+	inc gamecount
+	mov ebx, offset survlpinit
 	mov ecx, max_survs
+
 	SEGSFREELOOP:
 	mov eax, [ebx.debugstruct].segallocstart
 	push ecx
@@ -288,6 +317,10 @@ run_debug proc
 	add ebx, sizeof debugstruct
 	loop SEGSFREELOOP
 
+	mov eax, survlpinit
+	mov currentsurvlp, eax
+	mov isgame, 0
+	mov turncount, 0
 	invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId,DBG_CONTINUE 
 	jmp PROCESSALREADYOPENED
 run_debug endp

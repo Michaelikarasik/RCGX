@@ -1,16 +1,11 @@
 ﻿  Assembling setupsource.asm...
 \masm32\include\masm32rt.inc(33): warning A4011: multiple .MODEL directives found : .MODEL ignored
-setupsource.asm(186): warning A6001: no return from procedure
-data.inc(81): warning A4014: instructions and initialized data not supported in BSS segments
-data.inc(82): warning A4014: instructions and initialized data not supported in BSS segments
-data.inc(83): warning A4014: instructions and initialized data not supported in BSS segments
-data.inc(84): warning A4014: instructions and initialized data not supported in BSS segments
-data.inc(88): warning A4014: instructions and initialized data not supported in BSS segments
-setupsource.asm(186): warning A6004: procedure argument or local not referenced : ExceptionRecord
-setupsource.asm(186): warning A6004: procedure argument or local not referenced : EstablisherFrame
-setupsource.asm(186): warning A6004: procedure argument or local not referenced : DispatcherContext
-  Generating code
-  All 28 functions were compiled because no usable IPDB/IOBJ from previous compilation was found.
-  Finished generating code
-drd.lib(drd.obj) : warning LNK4099: PDB 'vc120.pdb' was not found with 'drd.lib(drd.obj)' or at 'C:\Users\Alma Karasik\source\repos\RCGX\Release\vc120.pdb'; linking object as if no debug info
+setupsource.asm(145): warning A6001: no return from procedure
+data.inc(100): warning A4014: instructions and initialized data not supported in BSS segments
+data.inc(101): warning A4014: instructions and initialized data not supported in BSS segments
+setupsource.asm(145): warning A6004: procedure argument or local not referenced : ExceptionRecord
+setupsource.asm(145): warning A6004: procedure argument or local not referenced : EstablisherFrame
+setupsource.asm(145): warning A6004: procedure argument or local not referenced : DispatcherContext
+setupsource.asm(227): warning A6004: procedure argument or local not referenced : survsnaplp
+  LINK : /LTCG specified but no code generation required; remove /LTCG from the link command line to improve linker performance
   RCGX.vcxproj -> C:\Users\Alma Karasik\source\repos\RCGX\Release\RCGX.exe

@@ -35,20 +35,6 @@ exception_handler dword ?
 .code
 ASSUME FS:NOTHING
 
-;reset_arwrite proc
-;	;fill up all allocated memory with illegal instructions
-;	mov edi, codewriteptr
-;	mov ebx, 4
-;	xor edx, edx
-;	mov eax, allocedmemsize
-;	div ebx
-;	mov ecx, eax
-;	mov eax, 0cccccccch
-;	rep stosd
-;
-;	ret
-;reset_arwrite endp
-
 reset_armain proc
 	;fill up all allocated memory with illegal instructions
 	mov edi, startofallocptr
@@ -62,20 +48,6 @@ reset_armain proc
 
 	ret
 reset_armain endp
-
-;reset_arrun proc
-;	;fill up all allocated memory with illegal instructions
-;	mov edi, coderunptr
-;	mov ebx, 4
-;	xor edx, edx
-;	mov eax, 010000h
-;	div ebx
-;	mov ecx, eax
-;	mov eax, 0cccccccch
-;	rep stosd
-;
-;	ret
-;reset_arrun endp
 
 update_changes proc
 	mov ecx, 0ffffh
@@ -106,19 +78,6 @@ thread_snap proc, survsnap:DWORD
 	ret
 thread_snap endp
 
-;write_next_instruction proc survsnap:dword
-;	mov ebx, survsnap
-;	add ebx, snst.survptr
-;	invoke length_disasm, [ebx]
-;	mov ecx, eax
-;	mov esi, [ebx]
-;	mov edi, esi
-;	sub edi, ardif
-;
-;	rep movsb
-;
-;	ret
-;write_next_instruction endp
 
 load_snap proc survsnap:dword
 	mov eax, survsnap
@@ -203,7 +162,6 @@ handle_exception endp
 ;	ret
 ;thread_run endp
 
-
 thread_setup proc survsnap:dword
 	invoke OutputDebugString, offset newsurvset
 	invoke VirtualAlloc, 0, exandstackallocsize, MEM_COMMIT, PAGE_READWRITE
@@ -236,7 +194,7 @@ thread_setup proc survsnap:dword
 	;invoke thread_run, survsnap
 thread_setup endp
 
-new_surv_loc proc	
+new_surv_loc proc survsnaplp:dword
 	;generate random number for a new survivor location
 	retry:
 	rdtsc
@@ -245,50 +203,26 @@ new_surv_loc proc
 	div ebx
 	add edx, 0100h
 	add edx, arptr
+	mov ecx, max_survs
+	mov ebx, offset my_snaps
 
-	mov eax, edx
-	mov ebx, surv1snap.survptr
-	sub eax, ebx
-	sub ebx, edx
-	neg ebx
-
-	mov ecx, edx
-	mov edi, surv2snap.survptr
-	sub ecx, edi
-	sub edi, edx
-	neg edi
-
+	push edx
+	LOCCHECKLOOP:
+	pop eax
+	push eax
+	sub eax, [ebx.snapstruct].survptr
+	mov edx, eax
+	sar edx, 31
+	xor eax, edx
+	sub eax, edx
 	cmp eax, 512
-	jl retry
-	cmp ebx, 512
-	jl retry
-	cmp edx, 512
-	jl retry
-	cmp ecx, 512
-	jl retry
+	jb retry
 
-	mov eax, edx
-	mov ebx, surv3snap.survptr
-	sub eax, ebx
-	sub ebx, edx
-	neg ebx
+	FINISHLOCCHECKLOOP:
+	add ebx, sizeof snapstruct
+	loop LOCCHECKLOOP
+	pop eax
 
-	mov ecx, edx
-	mov edi, surv4snap.survptr
-	sub ecx, edi
-	sub edi, edx
-	neg edi
-
-	cmp eax, 512
-	jl retry
-	cmp ebx, 512
-	jl retry
-	cmp edx, 512
-	jl retry
-	cmp ecx, 512
-	jl retry
-
-	mov eax, edx
 	ret
 new_surv_loc endp
 
@@ -296,6 +230,69 @@ write_surv macro writeloc, filename
 	mov file_handler, fopen(filename)
 	mov eax, fread(file_handler, writeloc, 512)
 	fclose file_handler 
+endm
+
+thread_setup_macro macro filename1, filename2, survsnap1, survsnap2, affiliation
+	push ebp
+	mov ebp, esp
+	invoke new_surv_loc, offset survsnap1
+	mov survsnap1.survptr, eax
+	write_surv survsnap1.survptr, filename1
+
+	invoke OutputDebugString, offset newsurvset
+	invoke VirtualAlloc, 0, exandstackallocsize, MEM_COMMIT, PAGE_READWRITE
+	mov edi, eax
+	add edi, 01000h
+	mov survsnap1.exstart, edi
+	push eax
+	invoke VirtualProtect, eax, 0fffh, PAGE_NOACCESS, offset trashpointer
+	pop eax
+	add eax, 02000h
+	push eax
+	invoke VirtualProtect, eax, 0fffh, PAGE_NOACCESS, offset trashpointer
+	pop eax
+	add eax, 02000h
+	push eax
+	invoke VirtualProtect, eax, 0fffh, PAGE_NOACCESS, offset trashpointer
+	pop esp
+
+	mov eax, survsnap1.survptr
+	mov esi, arptr
+	xor ecx, ecx
+	xor edx, edx
+	mov ebx, affiliation
+	db 0cch
+
+	mov esp, ebp
+	
+	invoke new_surv_loc, offset survsnap2
+	mov survsnap2.survptr, eax
+	write_surv survsnap2.survptr, filename2
+
+	mov eax, survsnap1.exstart
+	mov survsnap2.exstart, eax
+
+	invoke OutputDebugString, offset newsurvset
+	invoke VirtualAlloc, 0, exandstackallocsize - 02000h, MEM_COMMIT, PAGE_READWRITE
+	push eax
+	invoke VirtualProtect, eax, 0fffh, PAGE_NOACCESS, offset trashpointer
+	pop eax
+	push eax
+	add eax, 02000h
+	invoke VirtualProtect, eax, 0fffh, PAGE_NOACCESS, offset trashpointer
+	pop esp
+
+	mov eax, survsnap2.survptr
+	mov esi, arptr
+	xor ecx, ecx
+	xor edx, edx
+	mov ebx, affiliation 
+
+	db 0cch
+
+	mov esp, ebp
+	pop ebp
+	;invoke thread_run, survsnap
 endm
 
 main proc
@@ -310,31 +307,17 @@ main proc
 	mov arptr, eax
 	db 0cch
 
+	invoke OutputDebugString, offset setupstartstate
+	db 0cch
+
 	;reset the arenas
 	invoke reset_armain
 	
-	invoke new_surv_loc
-	mov surv1snap.survptr, eax
-	write_surv surv1snap.survptr, "surv1-1"
+	thread_setup_macro "surv1-1", "surv1-2", my_snaps.surv1snap, my_snaps.surv2snap, 1
 
-	invoke new_surv_loc
-	mov surv2snap.survptr, eax
-	write_surv surv2snap.survptr, "surv2-1"
+	thread_setup_macro "surv2-1", "surv2-2", my_snaps.surv3snap, my_snaps.surv4snap, 2
 
-	invoke thread_setup, offset surv1snap 
-	invoke thread_setup, offset surv2snap 
-
-	;invoke new_surv_loc
-	;mov surv3snap.survptr, eax
-	;write_surv surv3snap.survptr, "surv3"
-	;invoke thread_setup, offset surv3snap 
-	;
-	;invoke new_surv_loc
-	;mov surv4snap.survptr, eax
-	;write_surv surv4snap.survptr, "surv4"
-	;invoke thread_setup, offset surv4snap 
-
-	mov snapptr, offset surv1snap
+	mov snapptr, offset my_snaps.surv1snap
 
 	invoke OutputDebugString, offset startgame
 	db 0cch
