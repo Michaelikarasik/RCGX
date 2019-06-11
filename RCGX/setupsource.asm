@@ -12,8 +12,6 @@ includelib \masm32\lib\msvcrt.lib
 include \masm32\include\masm32rt.inc
 include data.inc
 include mylibs.inc
-includelib drd.lib
-include drd.inc
 
 .686
 .data
@@ -313,6 +311,7 @@ main proc
 	;allocate memory for the game
 	invoke OutputDebugString, offset arenaset ;tell control code to listen in for the arena ptr 
 	invoke VirtualAlloc , 0 , allocedmemsize, MEM_COMMIT, PAGE_EXECUTE_READWRITE ;allocate memory for the arena
+	wait
 	mov startofallocptr, eax
 	mov ebx, eax
 	add eax, ardif
@@ -329,6 +328,8 @@ main proc
 	thread_setup_macro "surv1-1", "surv1-2", my_snaps.surv1snap, my_snaps.surv2snap, 1
 
 	thread_setup_macro "surv2-1", "surv2-2", my_snaps.surv3snap, my_snaps.surv4snap, 2
+
+	thread_setup_macro "surv3-1", "surv3-2", my_snaps.surv5snap, my_snaps.surv6snap, 3
 
 	invoke OutputDebugString, offset startgame
 	db 0cch ;tell debugger to start the game

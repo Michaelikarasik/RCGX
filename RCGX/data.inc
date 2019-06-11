@@ -66,6 +66,10 @@ all_snaps struct
 	surv2snap snapstruct<>
 	surv3snap snapstruct<>
 	surv4snap snapstruct<>
+	surv5snap snapstruct<>
+	surv6snap snapstruct<>
+	surv7snap snapstruct<>
+	surv8snap snapstruct<>
 all_snaps ends
 
 all_survs struct
@@ -88,7 +92,7 @@ ardif equ 10000h
 stacksize equ 01000h
 extrasegsize equ 01000h
 
-max_survs equ 2 * 2
+max_survs equ 3 * 2
 
 exandstackallocsize equ 01000h + stacksize + 01000h + extrasegsize + 01000h
 

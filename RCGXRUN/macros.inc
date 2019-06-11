@@ -18,7 +18,7 @@ kill_surv macro survdblp
 endm
 
 UpdateMemoryChanges macro survdblp
-	local bigcmploop, smallcmploop, notdrawing, nomessage, endofbigloop, endofsmallloop, firstrow
+	local bigcmploop, smallcmploop, notdrawing, nomessage, endofbigloop, endofsmallloop, firstrow, dosetpixel
 
 	mov ebx, survdblp
 	cmp isdrawing, 0
@@ -52,7 +52,11 @@ UpdateMemoryChanges macro survdblp
 	jl firstrow
 	mov ecx, 0100h
 	div ecx
+	jmp dosetpixel
+
 	firstrow:
+	xchg eax, edx
+	dosetpixel:
 	invoke SetPixel, hMemDC, edx, eax, ebx
 	popad
 	movsb
@@ -60,8 +64,8 @@ UpdateMemoryChanges macro survdblp
 	jnz smallcmploop
 
 	endofsmallloop:
-	invoke InvalidateRect, hwnd, NULL, 0
-	invoke UpdateWindow, hwnd
+	invoke InvalidateRect, arenahwnd, NULL, 0
+	invoke UpdateWindow, arenahwnd
 	pop ecx
 	test ecx, ecx
 	jnz bigcmploop
@@ -78,12 +82,11 @@ finishupturn macro survdblp
 endm
 
 setupcontext macro survdblp
-		local shiftloop
+		local shiftloop, endofshiftloop
 		mov ebx, survdblp
 
 		;get the process context after surv setup
 		invoke GetThreadContext,pi.hThread, addr [ebx.debugstruct].survcontext
-		invoke GetLastError
 
 		;get surv starting location
 		mov eax, [ebx.debugstruct].survcontext.regEax
@@ -115,9 +118,12 @@ setupcontext macro survdblp
 
 		mov eax, 1
 		mov ecx, [ebx.debugstruct].affiliation
+		test ecx, ecx
+		jz endofshiftloop
 		shiftloop:
 		sal eax, 1
 		loop shiftloop
+		endofshiftloop:
 		or deathchart, eax
 		mov [ebx.debugstruct].afptr, eax
 
@@ -232,7 +238,7 @@ handle_ints_new macro survdblp
 	mov ebx, survdblp
 	invoke ReadProcessMemory, pi.hProcess, [ebx.debugstruct].survcontext.regEip, offset intcheckbuf, 2, NULL
 	mov ax, intcheckbuf
-	.if al == 0ceh || al == 0b9h || al == 060h
+	.if al == 0ceh || al == 060h
 		jmp ILLEGALINSTRUCTION
 	.elseif al == 0cdh
 		mov edi, [ebx.debugstruct].survcontext.regEdi
@@ -370,140 +376,6 @@ handle_ints_new macro survdblp
 	.endif
 endm
 
-;handle_ints macro survdb
-;	local HEAVYBOMBLOOP, ILLEGALINSTRUCTION, BOMBINGDONE, SMARTBOMBLOOP, KEEPSEARCHING, BOMBCHECKSTART, one, two
-;	invoke ReadProcessMemory, pi.hProcess, survdb.survcontext.regEip, offset intcheckbuf, 2, NULL
-;	mov ax, intcheckbuf
-;	.if al == 0ceh || al == 0b9h || al == 060h
-;		jmp ILLEGALINSTRUCTION
-;	.elseif al == 0cdh
-;		mov edi, survdb.survcontext.regEdi
-;		xor edx, edx
-;
-;		;if edi is outside all permitted zones, kill player
-;		cmp edi, arptr
-;		jl one
-;		cmp edi, arendptr
-;		jb BOMBCHECKSTART
-;		one:
-;		cmp edi, survdb.exstart
-;		jl two
-;		cmp edi, survdb.exend
-;		jb BOMBCHECKSTART
-;		two:
-;		cmp edi, survdb.stackstart
-;		jl ILLEGALINSTRUCTION
-;		cmp edi, survdb.stackend
-;		jae ILLEGALINSTRUCTION
-;
-;		BOMBCHECKSTART:
-;		;check if player used heavy bomb
-;		.if ah == 086h
-;			;if direction flag is set, move ebx to 4, else move to -4
-;			mov ebx, survdb.survcontext.regFlag
-;			and ebx, 0400h
-;			neg ebx
-;			sar ebx, 7
-;			add ebx, 4
-;
-;			cmp survdb.heavybombs, 0
-;			je BOMBINGDONE
-;			;;setup heavy bomb
-;			mov ecx, 64 + 1 ;increment ecx to counter the decrement in the start of the loop
-;			mov eax, survdb.survcontext.regEax
-;			mov edx, survdb.survcontext.regEdx
-;			push ax
-;			push dx
-;			mov edx, esp
-;			mov edi, survdb.survcontext.regEdi
-;
-;			;heavy bomb loop  to do until it either fails or finishes
-;			HEAVYBOMBLOOP:
-;			dec ecx
-;			;check if edi exited the arena and if it did bring it back
-;			heavyBombEdiArSectioning(survdb)
-;			;write dx:ax to memory
-;			push ecx
-;			push edx
-;			invoke WriteProcessMemory, pi.hProcess, edi, edx, 4, NULL	
-;			pop edx
-;			pop ecx
-;			test eax, eax
-;			jz ILLEGALINSTRUCTION
-;			;if succeeded add to edi according to direction flag and loop
-;			add edi, ebx
-;			test ecx, ecx
-;			jnz HEAVYBOMBLOOP
-;
-;			mov survdb.survcontext.regEdi, edi
-;			dec survdb.heavybombs
-;
-;		.elseif ah == 087h
-;			;if direction flag is set, move ebx to 1, else move to -1
-;			mov ebx, survdb.survcontext.regFlag
-;			and ebx, 0400h
-;			neg ebx
-;			sar ebx, 7
-;			inc ebx
-;
-;			mov ecx, 04000h
-;			cmp survdb.smartbombs, 0
-;			je BOMBINGDONE
-;
-;			dec survdb.smartbombs
-;
-;			mov edx, survdb.survcontext.regEdx
-;			shl edx, 16
-;			mov eax, survdb.survcontext.regEax
-;			mov dx, ax
-;
-;			mov edi, survdb.survcontext.regEdi
-;
-;			inc ecx ;inc ecx because decrementing ecx happens before the non loop jump acting as a loop so you it will loop one time less than the original value of ecx unless you increment it once
-;			SMARTBOMBLOOP:
-;			dec ecx
-;			smartBombEdiSectioning(survdb)
-;			
-;			push edx
-;			push ecx
-;			invoke ReadProcessMemory, pi.hProcess, edi, offset debugstringbuf, 4, NULL
-;			pop ecx
-;			pop edx
-;			cmp edx, debugstringbuf
-;			jne KEEPSEARCHING
-;			mov edx, survdb.survcontext.regEcx
-;			shl edx, 16
-;			mov eax, survdb.survcontext.regEbx
-;			mov dx, ax
-;			push edx
-;			mov edx, esp
-;			invoke WriteProcessMemory, pi.hProcess, edi, edx, 4, NULL
-;			xor ecx, ecx
-;
-;			KEEPSEARCHING:
-;			add edi, ebx
-;			test ecx, ecx
-;			jnz SMARTBOMBLOOP
-;
-;			jmp BOMBINGDONE
-;			
-;		.else
-;			ILLEGALINSTRUCTION:
-;			mov survdb.isdead, 1
-;		.endif
-;
-;		BOMBINGDONE:
-;		add survdb.survcontext.regEip, 2
-;		mov esi, offset survdb.survcontext
-;		mov edi, offset context
-;		mov ecx, SIZEOF CONTEXT
-;		rep movsb		
-;		jmp survswitch
-;	.else
-;		
-;	.endif
-;endm
-
 switch_survs macro lastsurvlp
 	local notdead, NOTABOVEMAXSURV, CHANGETONEXTSURV
 	mov ebx, lastsurvlp
@@ -591,14 +463,6 @@ check_arena_edges macro lastState, lowerEdge, higherEdge
 	.endif
 endm
 
-RGB macro red,green,blue 
-    xor    eax,eax 
-    mov  ah,blue 
-    shl     eax,8 
-    mov  ah,green 
-    mov  al,red 
-endm
-
 getWindowMessage macro
 	local nomessage
 	invoke PeekMessage, ADDR msg, NULL, 0,0,0 
@@ -610,6 +474,24 @@ getWindowMessage macro
     invoke TranslateMessage, ADDR msg 
     invoke DispatchMessage, ADDR msg 
 	nomessage:
+endm
+
+openwindow macro windowclass
+	local finishup, next1
+	 mov ebx, offset windowclass
+	 invoke RegisterClassEx, addr windowclass
+	 cmp ebx, offset arwc
+	 jne next1
+	 INVOKE CreateWindowEx,NULL,ADDR ClassName,ADDR AppName,\ 
+			   WS_OVERLAPPEDWINDOW xor WS_THICKFRAME xor WS_MAXIMIZEBOX,CW_USEDEFAULT,\ 
+			   CW_USEDEFAULT,0110h,0127h,NULL,NULL,\ 
+			   hInst,NULL
+	 mov   arenahwnd,eax 
+	 jmp finishup
+	 next1:
+	 finishup:
+	 invoke ShowWindow, arenahwnd,SW_SHOWNORMAL 
+	 invoke UpdateWindow, arenahwnd 
 endm
 
 loadDrd macro 

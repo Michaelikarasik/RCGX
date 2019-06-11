@@ -13,8 +13,6 @@ includelib \masm32\lib\advapi32.lib
 include \masm32\include\masm32rt.inc
 include data.inc
 include macros.inc
-include drd.inc
-includelib drd.lib
 
 .686
 .data
@@ -41,8 +39,6 @@ isgame db 0
 turncount dword 0
 gamecount dword 0
 
-floatval dword 195.385
-
 currentsurv byte ?
 survlpinit dword my_survs.surv1db.survcontext
 currentsurvlp dword my_survs.surv1db.survcontext
@@ -54,6 +50,8 @@ livingsurvnum byte max_survs
 deathchart dword 0
 
 IDB_MAIN equ 1
+
+max_turns equ 50000
 
 AppName db "RCGX",0 
 ofn OPENFILENAME <> 
@@ -70,6 +68,8 @@ ProcessInfo db "File Handle: %lx ",0dh,0Ah
 ClassName db "SimpleWinClass",0 
 OurText  db "Win32 assembly is great and easy!",0
 
+arwc WNDCLASSEX <>
+
 .data? 
 buffer db 512 dup(?) 
 startinfo STARTUPINFO <> 
@@ -85,7 +85,7 @@ CommandLine LPSTR ?
 msg MSG<> 
 hBitmap dd ?
 hMemDC HDC ?
-hwnd HWND ?
+arenahwnd HWND ?
 
 .code
 
@@ -146,15 +146,15 @@ run_debug proc
 					 sub eax, edi
 					 cmp eax, 4
 					 jg EDICHANGENOTNEEDED
-					 sub context.regEdi, 0ffffh
+					 sub context.regEdi,010000h
 					 EDICHANGENOTNEEDED:
 
 
 					 mov eax, context.regEip
 					 .if eax >= arendptr && eax <= eipendptr
-						sub context.regEip, 0ffffh
+						sub context.regEip, 010000h
 					 .elseif eax < arptr && eax > eipstartptr
-						add context.regEip, 0ffffh
+						add context.regEip, 010000h
 					 .endif
 
 					 check_arena_edges postarlaststate, arptr, arendptr
@@ -162,7 +162,7 @@ run_debug proc
 				
 					mov eax, context.regEsp
 					.if eax < arptr && eax >= esparstartptr
-						add context.regEsp, 0ffffh
+						add context.regEsp, 010000h
 					.endif
 
 					finishupturn currentsurvlp
@@ -173,7 +173,7 @@ run_debug proc
 					cmp eax, survlpinit
 					jne NOTSTARTOFNEWTURN 
 					inc turncount
-					cmp turncount, 200000
+					cmp turncount, max_turns
 					jae DOWIN
 
 					NOTSTARTOFNEWTURN:
@@ -325,8 +325,8 @@ run_debug proc
 	mov currentsurvlp, eax
 	mov isgame, 0
 	mov turncount, 0
-	      invoke LoadBitmap,hInstance,IDB_MAIN 
-	  invoke SelectObject,hMemDC,eax
+	invoke LoadBitmap,hInstance,IDB_MAIN 
+	invoke SelectObject,hMemDC,eax
 	invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId,DBG_CONTINUE 
 	jmp PROCESSALREADYOPENED
 run_debug endp
@@ -340,31 +340,27 @@ start:
  invoke ExitProcess,eax
 
 WinMain proc hInst:HINSTANCE,hPrevInst:HINSTANCE,CmdLine:LPSTR,CmdShow:DWORD 
- LOCAL wc:WNDCLASSEX 
- mov   wc.cbSize,SIZEOF WNDCLASSEX 
- mov   wc.style, CS_HREDRAW or CS_VREDRAW 
- mov   wc.lpfnWndProc, OFFSET WndProc 
- mov   wc.cbClsExtra,NULL 
- mov   wc.cbWndExtra,NULL 
+ mov   arwc.cbSize,SIZEOF WNDCLASSEX 
+ mov   arwc.style, CS_HREDRAW or CS_VREDRAW 
+ mov   arwc.lpfnWndProc, OFFSET WndProc 
+ mov   arwc.cbClsExtra,NULL 
+ mov   arwc.cbWndExtra,NULL 
  push  hInstance 
- pop   wc.hInstance 
- mov   wc.hbrBackground,000ffffffh
- mov   wc.lpszMenuName,NULL 
- mov   wc.lpszClassName,OFFSET ClassName 
+ pop   arwc.hInstance 
+ mov   arwc.hbrBackground,COLOR_WINDOW
+ mov   arwc.lpszMenuName,NULL 
+ mov   arwc.lpszClassName,OFFSET ClassName 
  invoke LoadIcon,NULL,IDI_APPLICATION 
- mov   wc.hIcon,eax 
- mov   wc.hIconSm,eax 
+ mov   arwc.hIcon,eax 
+ mov   arwc.hIconSm,eax 
  invoke LoadCursor,NULL,IDC_ARROW 
- mov   wc.hCursor,eax 
- invoke RegisterClassEx, addr wc 
- INVOKE CreateWindowEx,NULL,ADDR ClassName,ADDR AppName,\ 
-           WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,\ 
-           CW_USEDEFAULT,257,257,NULL,NULL,\ 
-           hInst,NULL 
- mov   hwnd,eax 
- invoke ShowWindow, hwnd,SW_SHOWNORMAL 
- invoke UpdateWindow, hwnd 
- mov     eax,msg.wParam 
+ mov   arwc.hCursor,eax 
+
+ cmp isdrawing, 0
+ jz notopeningarenawindow
+	openwindow arwc
+ notopeningarenawindow:
+
  invoke run_debug
  ret 
 WinMain endp
