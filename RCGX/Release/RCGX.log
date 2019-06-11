@@ -1,11 +1,6 @@
 ﻿  Assembling setupsource.asm...
 \masm32\include\masm32rt.inc(33): warning A4011: multiple .MODEL directives found : .MODEL ignored
-setupsource.asm(145): warning A6001: no return from procedure
-data.inc(100): warning A4014: instructions and initialized data not supported in BSS segments
-data.inc(101): warning A4014: instructions and initialized data not supported in BSS segments
-setupsource.asm(145): warning A6004: procedure argument or local not referenced : ExceptionRecord
-setupsource.asm(145): warning A6004: procedure argument or local not referenced : EstablisherFrame
-setupsource.asm(145): warning A6004: procedure argument or local not referenced : DispatcherContext
-setupsource.asm(227): warning A6004: procedure argument or local not referenced : survsnaplp
+data.inc(115): warning A4014: instructions and initialized data not supported in BSS segments
+data.inc(116): warning A4014: instructions and initialized data not supported in BSS segments
   LINK : /LTCG specified but no code generation required; remove /LTCG from the link command line to improve linker performance
   RCGX.vcxproj -> C:\Users\Alma Karasik\source\repos\RCGX\Release\RCGX.exe

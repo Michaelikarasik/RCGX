@@ -136,9 +136,13 @@
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="RCGXRUN.rc" />
+    <ResourceCompile Include="Source.rc" />
   </ItemGroup>
   <ItemGroup>
     <None Include="macros.inc" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="RCGXBG.bmp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

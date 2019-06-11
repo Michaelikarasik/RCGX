@@ -1,16 +1,13 @@
 bits 32
 mov dx, 0xffff
+mov esi, edi
 mov edi, eax
 add edi, here
-push eax
-push eax
+push edi
 mov ax, 0xfbe8
-int 0x86
-pop edi
-add edi, here
-mov ebx, 0xffffffff
-pop esp
-mov eax, 0xab535353
-add esp, here
-stosd
+;int 0x86
+mov edi, [esp]
+movsd
+movsd
+movsd
 here:

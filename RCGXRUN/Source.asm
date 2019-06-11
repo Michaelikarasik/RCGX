@@ -1,5 +1,6 @@
 .model flat,stdcall 
 option casemap:none 
+WinMain proto :DWORD,:DWORD,:DWORD,:DWORD 
 include \masm32\include\windows.inc 
 include \masm32\include\kernel32.inc 
 include \masm32\include\comdlg32.inc 
@@ -12,6 +13,8 @@ includelib \masm32\lib\advapi32.lib
 include \masm32\include\masm32rt.inc
 include data.inc
 include macros.inc
+include drd.inc
+includelib drd.lib
 
 .686
 .data
@@ -38,6 +41,8 @@ isgame db 0
 turncount dword 0
 gamecount dword 0
 
+floatval dword 195.385
+
 currentsurv byte ?
 survlpinit dword my_survs.surv1db.survcontext
 currentsurvlp dword my_survs.surv1db.survcontext
@@ -47,6 +52,8 @@ debugstringbuf dword ?
 livingsurvnum byte max_survs
 
 deathchart dword 0
+
+IDB_MAIN equ 1
 
 AppName db "RCGX",0 
 ofn OPENFILENAME <> 
@@ -60,6 +67,8 @@ ProcessInfo db "File Handle: %lx ",0dh,0Ah
             db "Thread Handle: %lx",0Dh,0Ah 
             db "Image Base: %lx",0Dh,0Ah 
             db "Start offsetess: %lx",0 
+ClassName db "SimpleWinClass",0 
+OurText  db "Win32 assembly is great and easy!",0
 
 .data? 
 buffer db 512 dup(?) 
@@ -71,6 +80,12 @@ ThreadId dd ?
 align dword 
 context CONTEXT <> 
 RCGXSetupStartContext CONTEXT<>
+hInstance HINSTANCE ? 
+CommandLine LPSTR ?
+msg MSG<> 
+hBitmap dd ?
+hMemDC HDC ?
+hwnd HWND ?
 
 .code
 
@@ -80,7 +95,7 @@ run_debug proc
 	mov ofn.lpstrFile, OFFSET buffer 
 	mov ofn.nMaxFile,512 
 	mov ofn.Flags, OFN_FILEMUSTEXIST or OFN_PATHMUSTEXIST or OFN_LONGNAMES or OFN_EXPLORER or OFN_HIDEREADONLY 
-	invoke GetOpenFileName, offset ofn 
+	invoke GetOpenFileName, offset ofn
 	.if eax==TRUE 
 		invoke GetStartupInfo,offset startinfo 
 		invoke CreateProcess, offset buffer, NULL, NULL, NULL, FALSE, DEBUG_PROCESS+ DEBUG_ONLY_THIS_PROCESS, NULL, NULL, offset startinfo, offset pi 
@@ -107,15 +122,33 @@ run_debug proc
 		.while TRUE
 		   invoke WaitForDebugEvent, offset DBEvent, INFINITE
 		   invoke GetThreadContext,pi.hThread, offset context
-		   .if DBEvent.dwDebugEventCode==1 && isgame != 0
-				.if DBEvent.u.Exception.pExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP
-					 custominstructionreset:
+		   .if DBEvent.dwDebugEventCode==1
+				.if DBEvent.u.Exception.pExceptionRecord.ExceptionCode == EXCEPTION_SINGLE_STEP && isgame != 0
 					 or context.regFlag,0100h
 					 mov edi, context.regEdi
-					 .if edi >= arendptr && edi < ediarendptr
-						sub edi, 0ffffh
-						mov context.regEdi, edi
-					 .endif
+
+					 cmp edi, arendptr
+					 jl CHECKEDIUNDERARENA
+					 cmp edi, ediarendptr
+					 jl EDICHANGENEEDED
+					 CHECKEDIUNDERARENA:
+					 cmp edi, arptr
+					 jge EDICHANGENOTNEEDED
+					 cmp edi, esparstartptr
+					 jl EDICHANGENOTNEEDED
+					 EDICHANGENEEDED:
+					 mov ebx, currentsurvlp
+					 mov eax, [ebx.debugstruct].survcontext.regEdi
+					 sub eax, edi
+					 mov edi, eax
+					 sal edi, 31
+					 xor eax, edi
+					 sub eax, edi
+					 cmp eax, 4
+					 jg EDICHANGENOTNEEDED
+					 sub context.regEdi, 0ffffh
+					 EDICHANGENOTNEEDED:
+
 
 					 mov eax, context.regEip
 					 .if eax >= arendptr && eax <= eipendptr
@@ -124,49 +157,26 @@ run_debug proc
 						add context.regEip, 0ffffh
 					 .endif
 
-					invoke ReadProcessMemory, pi.hProcess, arendptr, offset postarcheckbuf, 4, NULL
-					mov ebx, postarlaststate
-					.if postarcheckbuf != ebx
-						invoke WriteProcessMemory, pi.hProcess, arptr, offset postarcheckbuf, 4, NULL
-						mov ebx, postarcheckbuf
-						mov postarlaststate, ebx
-					.else
-						invoke ReadProcessMemory, pi.hProcess, arptr, offset postarcheckbuf, 4, NULL
-						.if postarcheckbuf != ebx
-							invoke WriteProcessMemory, pi.hProcess, arendptr, offset postarcheckbuf, 4, NULL
-							mov ebx, postarcheckbuf
-							mov postarlaststate, ebx
-						.endif
-					.endif
-
-					mov ebx, prearlaststate
-
-					invoke ReadProcessMemory, pi.hProcess, esparendptr, offset postarcheckbuf, 4, NULL
-					.if postarcheckbuf != ebx
-						invoke WriteProcessMemory, pi.hProcess, esparstartptr, offset postarcheckbuf, 4, NULL
-						mov ebx, postarcheckbuf
-						mov prearlaststate, ebx
-					.else
-						invoke ReadProcessMemory, pi.hProcess, esparstartptr, offset postarcheckbuf, 4, NULL
-						.if postarcheckbuf != ebx
-							invoke WriteProcessMemory, pi.hProcess, esparendptr, offset postarcheckbuf, 4, NULL
-							mov ebx, postarcheckbuf
-							mov prearlaststate, ebx
-						.endif
-					.endif
+					 check_arena_edges postarlaststate, arptr, arendptr
+					 check_arena_edges prearlaststate, esparstartptr, esparendptr
 				
 					mov eax, context.regEsp
 					.if eax < arptr && eax >= esparstartptr
 						add context.regEsp, 0ffffh
 					.endif
 
+					finishupturn currentsurvlp
+
 					survswitch:
 					mov eax, currentsurvlp
 					;check if start of new turn
+					cmp eax, survlpinit
+					jne NOTSTARTOFNEWTURN 
 					inc turncount
-					cmp turncount, 200000 * max_survs
+					cmp turncount, 200000
 					jae DOWIN
 
+					NOTSTARTOFNEWTURN:
 					;check if currentsurvlp is above the max surv and reset it accordingly
 					cmp eax, offset my_survs + (sizeof debugstruct) * max_survs
 					jl NOTABOVEMAXSURV
@@ -176,7 +186,6 @@ run_debug proc
 					switch_survs currentsurvlp
 
 					 invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId,DBG_CONTINUE 
-					 UpdateMemoryChanges
 					 .continue 
 				
 				.elseif isgame == 1
@@ -277,6 +286,7 @@ run_debug proc
 						mov eax, max_survs
 						mov livingsurvnum, al
 						invoke ReadProcessMemory, pi.hProcess, esparstartptr, debugarstartptr, 010007h, NULL
+						invoke ReadProcessMemory, pi.hProcess, esparstartptr, debugarcheckptr, 010007h, NULL
 					.endif
 					jmp FOUNDMESSAGE
 				.endif
@@ -286,15 +296,9 @@ run_debug proc
                 .continue 
 			.elseif DBEvent.dwDebugEventCode==EXIT_PROCESS_DEBUG_EVENT 
 				.break
-			.elseif DBEvent.dwDebugEventCode==CREATE_PROCESS_DEBUG_EVENT 
-				  
-			.elseif DBEvent.dwDebugEventCode==CREATE_THREAD_DEBUG_EVENT 
-				
-			.elseif DBEvent.dwDebugEventCode==EXIT_THREAD_DEBUG_EVENT 
-				
 			.endif
-		   invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId, DBG_EXCEPTION_NOT_HANDLED 
 
+		   invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId, DBG_EXCEPTION_NOT_HANDLED 
 		.endw 
 		invoke CloseHandle,pi.hProcess 
 		invoke CloseHandle,pi.hThread 
@@ -321,12 +325,74 @@ run_debug proc
 	mov currentsurvlp, eax
 	mov isgame, 0
 	mov turncount, 0
+	      invoke LoadBitmap,hInstance,IDB_MAIN 
+	  invoke SelectObject,hMemDC,eax
 	invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId,DBG_CONTINUE 
 	jmp PROCESSALREADYOPENED
 run_debug endp
 
+start: 
+ invoke GetModuleHandle, NULL 
+ mov    hInstance,eax 
+ invoke GetCommandLine 
+ mov    CommandLine,eax 
+ invoke WinMain, hInstance,NULL,CommandLine, SW_SHOWDEFAULT 
+ invoke ExitProcess,eax
 
-main proc
-	invoke run_debug
-main endp
-end main
+WinMain proc hInst:HINSTANCE,hPrevInst:HINSTANCE,CmdLine:LPSTR,CmdShow:DWORD 
+ LOCAL wc:WNDCLASSEX 
+ mov   wc.cbSize,SIZEOF WNDCLASSEX 
+ mov   wc.style, CS_HREDRAW or CS_VREDRAW 
+ mov   wc.lpfnWndProc, OFFSET WndProc 
+ mov   wc.cbClsExtra,NULL 
+ mov   wc.cbWndExtra,NULL 
+ push  hInstance 
+ pop   wc.hInstance 
+ mov   wc.hbrBackground,000ffffffh
+ mov   wc.lpszMenuName,NULL 
+ mov   wc.lpszClassName,OFFSET ClassName 
+ invoke LoadIcon,NULL,IDI_APPLICATION 
+ mov   wc.hIcon,eax 
+ mov   wc.hIconSm,eax 
+ invoke LoadCursor,NULL,IDC_ARROW 
+ mov   wc.hCursor,eax 
+ invoke RegisterClassEx, addr wc 
+ INVOKE CreateWindowEx,NULL,ADDR ClassName,ADDR AppName,\ 
+           WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,\ 
+           CW_USEDEFAULT,257,257,NULL,NULL,\ 
+           hInst,NULL 
+ mov   hwnd,eax 
+ invoke ShowWindow, hwnd,SW_SHOWNORMAL 
+ invoke UpdateWindow, hwnd 
+ mov     eax,msg.wParam 
+ invoke run_debug
+ ret 
+WinMain endp
+
+WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM 
+   LOCAL ps:PAINTSTRUCT 
+   LOCAL hdc:HDC 
+   LOCAL rect:RECT 
+   .if uMsg==WM_CREATE 
+      invoke LoadBitmap,hInstance,IDB_MAIN 
+      mov hBitmap,eax 
+      invoke BeginPaint,hWnd,addr ps 
+	  invoke CreateCompatibleDC,eax
+	  mov hMemDC, eax
+	  invoke SelectObject,hMemDC,hBitmap 
+   .elseif uMsg==WM_PAINT 
+      invoke BeginPaint,hWnd,addr ps 
+      mov    hdc,eax 
+      invoke BitBlt,hdc,0,0,rect.right,rect.bottom,hMemDC,0,0,SRCCOPY 
+      invoke EndPaint,hWnd,addr ps 
+ .elseif uMsg==WM_DESTROY 
+  invoke DeleteObject,hBitmap 
+  invoke PostQuitMessage,NULL 
+ .ELSE 
+  invoke DefWindowProc,hWnd,uMsg,wParam,lParam 
+  ret 
+ .ENDIF 
+ xor eax,eax 
+ ret 
+WndProc endp 
+end start

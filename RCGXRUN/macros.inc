@@ -17,28 +17,64 @@ kill_surv macro survdblp
 	loop deathcheckloop
 endm
 
-UpdateMemoryChanges macro 
-	local cmploop, notdrawing
+UpdateMemoryChanges macro survdblp
+	local bigcmploop, smallcmploop, notdrawing, nomessage, endofbigloop, endofsmallloop, firstrow
+
+	mov ebx, survdblp
 	cmp isdrawing, 0
 	jz notdrawing
 
-	invoke ReadProcessMemory, pi.hProcess, esparstartptr, debugarcheckptr, 010007h, NULL
-	mov esi, debugarcheckptr
-	mov edi, debugarstartptr
-	mov ecx, 010007
+	mov ebx, [ebx.debugstruct].color
 
-	cmploop:
+	invoke ReadProcessMemory, pi.hProcess, esparstartptr, debugarstartptr, 010007h, NULL
+	mov edi, debugarcheckptr
+	mov esi, debugarstartptr
+	mov ecx, 04000h
+	bigcmploop:
+	repe cmpsd
+	je endofbigloop
+	sub esi, 4
+	sub edi, 4
+	push ecx
+
+	mov ecx, 4
+	smallcmploop:
 	repe cmpsb
-	;code for changed
-	test ecx, ecx
-	jnz cmploop
+	je endofsmallloop
+	dec esi
+	dec edi
 
-	mov esi, debugarcheckptr
-	mov edi, debugarstartptr
-	mov ecx, 010007h
-	rep movsb
+	pushad
+	mov eax, esi
+	sub eax, debugarstartptr
+	xor edx, edx
+	cmp eax, 0100h
+	jl firstrow
+	mov ecx, 0100h
+	div ecx
+	firstrow:
+	invoke SetPixel, hMemDC, edx, eax, ebx
+	popad
+	movsb
+	test ecx, ecx
+	jnz smallcmploop
+
+	endofsmallloop:
+	invoke InvalidateRect, hwnd, NULL, 0
+	invoke UpdateWindow, hwnd
+	pop ecx
+	test ecx, ecx
+	jnz bigcmploop
+
+	endofbigloop:
+	getWindowMessage
 
 	notdrawing:
+endm
+
+finishupturn macro survdblp
+	UpdateMemoryChanges survdblp
+	jmp survswitch
 endm
 
 setupcontext macro survdblp
@@ -72,6 +108,10 @@ setupcontext macro survdblp
 		mov eax, [ebx.debugstruct].survcontext.regEbx
 		mov [ebx.debugstruct].affiliation, eax
 		mov [ebx.debugstruct].survcontext.regEbx, 0
+
+		mov eax, [ebx.debugstruct].survcontext.regEdx
+		mov [ebx.debugstruct].color, eax
+		mov [ebx.debugstruct].survcontext.regEdx, 0
 
 		mov eax, 1
 		mov ecx, [ebx.debugstruct].affiliation
@@ -324,7 +364,7 @@ handle_ints_new macro survdblp
 		mov edi, offset context
 		mov ecx, SIZEOF CONTEXT
 		rep movsb	
-		jmp survswitch
+		finishupturn ebx
 	.else
 		
 	.endif
@@ -532,4 +572,54 @@ endOfRoundPoints macro
 	add edx, sizeof debugstruct
 	test ecx, ecx
 	jnz WINPOINTGIVELOOP
+endm
+
+check_arena_edges macro lastState, lowerEdge, higherEdge
+	invoke ReadProcessMemory, pi.hProcess, higherEdge, offset postarcheckbuf, 4, NULL
+	mov ebx, lastState
+	.if postarcheckbuf != ebx
+		invoke WriteProcessMemory, pi.hProcess, lowerEdge, offset postarcheckbuf, 4, NULL
+		mov ebx, postarcheckbuf
+		mov lastState, ebx
+	.else
+		invoke ReadProcessMemory, pi.hProcess, lowerEdge, offset postarcheckbuf, 4, NULL
+		.if postarcheckbuf != ebx
+			invoke WriteProcessMemory, pi.hProcess, higherEdge, offset postarcheckbuf, 4, NULL
+			mov ebx, postarcheckbuf
+			mov lastState, ebx
+		.endif
+	.endif
+endm
+
+RGB macro red,green,blue 
+    xor    eax,eax 
+    mov  ah,blue 
+    shl     eax,8 
+    mov  ah,green 
+    mov  al,red 
+endm
+
+getWindowMessage macro
+	local nomessage
+	invoke PeekMessage, ADDR msg, NULL, 0,0,0 
+	test eax, eax
+	jz nomessage
+    invoke GetMessage, ADDR msg,NULL,0,0 
+    test eax, eax
+	jz nomessage
+    invoke TranslateMessage, ADDR msg 
+    invoke DispatchMessage, ADDR msg 
+	nomessage:
+endm
+
+loadDrd macro 
+	invoke drd_init,1200,700,0
+	invoke drd_imageLoadFile,offset res.bgpath,offset res.bg
+	invoke drd_imageLoadFile,offset res.pathNoaStand0,offset res.noaStand0
+	invoke drd_imageSetTransparent,offset res.noaStand0,0ffffffh
+	invoke drd_imageLoadFile,offset res.pathNoaStand1,offset res.noaStand1
+	invoke drd_imageSetTransparent,offset res.noaStand1,0ffffffh
+	
+	invoke drd_imageLoadFile,offset hd.tobi.stand,offset ram.tobi.stand
+	invoke drd_imageSetTransparent,offset  ram.tobi.stand,0008000h
 endm

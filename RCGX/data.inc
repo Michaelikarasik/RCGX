@@ -26,6 +26,7 @@ snapstruct struct
 	survptr dword 0
 	stackptr dword ?
 	exstart dword ?
+	color dword ?
 snapstruct ends
 
 seh struct
@@ -46,7 +47,19 @@ debugstruct struct
 	wincount dword 0
 	affiliation dword ?
 	afptr dword ?
+	color dword ?
 debugstruct ends
+
+surv_colors struct
+	surv11 dword ?
+	surv12 dword ?
+	surv21 dword ?
+	surv22 dword ?
+	surv31 dword ?
+	surv32 dword ?
+	surv41 dword ?
+	surv42 dword ?
+surv_colors ends
 
 all_snaps struct
 	surv1snap snapstruct<>
@@ -75,7 +88,7 @@ ardif equ 10000h
 stacksize equ 01000h
 extrasegsize equ 01000h
 
-max_survs equ 4
+max_survs equ 2 * 2
 
 exandstackallocsize equ 01000h + stacksize + 01000h + extrasegsize + 01000h
 
@@ -92,6 +105,8 @@ trashpointer dword ?
 startofallocptr dword ?
 
 isdrawing dword 1
+
+my_colors surv_colors<000ff0000h, 00000ff00h, 0000000ffh, 000ff5040h, 0007039d8h, 000294892h, 000583759h, 000295843h>
 
 .data?
 
