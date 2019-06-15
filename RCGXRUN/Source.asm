@@ -443,17 +443,22 @@ guiWndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
 	  xor edx, edx
 	  mov bx, 4
 	  div bx
-	  mov textrect.left, eax
-	  push 00030h ;"0\0"
+	  add textrect.left, eax
+	  mov eax, textrect.right
+	  xor edx, edx
+	  mov bx, max_survs - 2
+	  div bx
+	  mov esi, eax
+	  push 00030h ; 0x3000 = "0\0"
 	  mov edi, esp	
 	  push 06d616574h ;"team"
 	  mov ebx, esp
 
 	  drawtextloop:
-	  add textrect.left, 100
 	  inc byte ptr [edi]
       invoke DrawText, hGuiDC,ebx,-1, ADDR textrect, DT_SINGLELINE or DT_LEFT or DT_BOTTOM
-	  cmp byte ptr [edi], 034h
+	  add textrect.left, esi
+	  cmp byte ptr [edi], 030h + (max_survs / 2)
 	  jne drawtextloop
 
 	  invoke BitBlt,hdc,0,0,rect.right,rect.bottom,hGuiDC,0,0,SRCCOPY 
