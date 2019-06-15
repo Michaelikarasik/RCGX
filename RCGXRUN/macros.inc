@@ -17,8 +17,48 @@ kill_surv macro survdblp
 	loop deathcheckloop
 endm
 
+drawonarena macro startlp, length, color, myDC, totalsize, rowsize
+	local drawloop, drawisinarena, firstrow, setpixel, donedrawing
+	push myDC
+	push totalsize
+	push rowsize
+	push color
+	push startlp
+	mov ecx, length
+	pop eax ;startlp
+	pop esi ;color
+	pop edi ;rowsize
+	pop ebx ;totalsize
+	pop edx ;myDC
+	test ecx,ecx
+	jz donedrawing
+	drawloop:
+	pushad
+	cmp eax, ebx ;writelp < totalsize
+	jb drawisinarena
+	sub eax, ebx
+	drawisinarena:
+	xchg ebx, edx ;ebx = myDC
+	xor edx, edx
+	cmp eax, edi ;writelp < rowsize
+	jb firstrow
+	div edi
+	jmp setpixel
+	firstrow:
+	xchg edx, eax
+	setpixel: ;edx = columns, eax = rows
+	invoke SetPixel, ebx, edx, eax, esi
+	popad
+	inc eax
+	dec ecx
+	test ecx, ecx
+	jnz drawloop
+	donedrawing:
+
+endm
+
 UpdateMemoryChanges macro survdblp
-	local bigcmploop, smallcmploop, notdrawing, nomessage, endofbigloop, endofsmallloop, firstrow, dosetpixel
+	local bigcmploop, smallcmploop, notdrawing, nomessage, endofbigloop, endofsmallloop, firstrow, dosetpixel, notfirstdot, drawloop
 
 	mov ebx, survdblp
 	cmp isdrawing, 0
@@ -30,6 +70,7 @@ UpdateMemoryChanges macro survdblp
 	mov edi, debugarcheckptr
 	mov esi, debugarstartptr
 	mov ecx, 04000h
+	xor edx, edx
 	bigcmploop:
 	repe cmpsd
 	je endofbigloop
@@ -43,9 +84,22 @@ UpdateMemoryChanges macro survdblp
 	je endofsmallloop
 	dec esi
 	dec edi
-
-	pushad
+	
+	test edx, edx
+	jnz notfirstdot
 	mov eax, esi
+	notfirstdot:
+	mov edx, esi
+	movsb
+	test ecx, ecx
+	jnz smallcmploop
+
+	endofsmallloop:
+	inc edx
+	sub edx, eax
+	mov ecx, edx
+	drawloop:
+	pushad
 	sub eax, debugarstartptr
 	xor edx, edx
 	cmp eax, 0100h
@@ -59,11 +113,11 @@ UpdateMemoryChanges macro survdblp
 	dosetpixel:
 	invoke SetPixel, hMemDC, edx, eax, ebx
 	popad
-	movsb
+	inc eax
+	dec ecx
 	test ecx, ecx
-	jnz smallcmploop
+	jnz drawloop
 
-	endofsmallloop:
 	invoke InvalidateRect, arenahwnd, NULL, 0
 	invoke UpdateWindow, arenahwnd
 	pop ecx
@@ -116,6 +170,10 @@ setupcontext macro survdblp
 		mov [ebx.debugstruct].color, eax
 		mov [ebx.debugstruct].survcontext.regEdx, 0
 
+		mov eax, [ebx.debugstruct].survcontext.regEcx
+		mov [ebx.debugstruct].survlength, eax
+		mov [ebx.debugstruct].survcontext.regEcx, 0
+
 		mov eax, 1
 		mov ecx, [ebx.debugstruct].affiliation
 		test ecx, ecx
@@ -133,6 +191,11 @@ setupcontext macro survdblp
 
 		or [ebx.debugstruct].survcontext.regFlag, 100h	
 
+		mov eax, [ebx.debugstruct].color
+		mov edx, [ebx.debugstruct].survlength
+		mov ecx, [ebx.debugstruct].survcontext.regEip
+		sub ecx, arptr
+		drawonarena ecx, edx, eax, hMemDC, 010000h, 0100h
 endm
 
 protectSurvSegs macro lastsurvdblp, nextsurvdblp
@@ -476,22 +539,19 @@ getWindowMessage macro
 	nomessage:
 endm
 
-openwindow macro windowclass
+openarwindow macro windowclass
 	local finishup, next1
-	 mov ebx, offset windowclass
-	 invoke RegisterClassEx, addr windowclass
-	 cmp ebx, offset arwc
-	 jne next1
-	 INVOKE CreateWindowEx,NULL,ADDR ClassName,ADDR AppName,\ 
+	 invoke RegisterClassEx, addr arwc
+	 push eax
+	 INVOKE CreateWindowEx,NULL,ADDR arClassName,ADDR AppName,\ 
 			   WS_OVERLAPPEDWINDOW xor WS_THICKFRAME xor WS_MAXIMIZEBOX,CW_USEDEFAULT,\ 
 			   CW_USEDEFAULT,0110h,0127h,NULL,NULL,\ 
-			   hInst,NULL
-	 mov   arenahwnd,eax 
-	 jmp finishup
-	 next1:
-	 finishup:
+			   arHInstance,NULL
+	mov   arenahwnd,eax 
 	 invoke ShowWindow, arenahwnd,SW_SHOWNORMAL 
 	 invoke UpdateWindow, arenahwnd 
+	 pop eax
+	 invoke UnregisterClass, eax, arHInstance
 endm
 
 loadDrd macro 

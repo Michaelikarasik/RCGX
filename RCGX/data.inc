@@ -15,18 +15,11 @@ snst struct
 snst ends		 
 
 snapstruct struct
-	eaxptr dword ?
-	ecxptr dword ?
-	edxptr dword ?
-	ebxptr dword ?
-	espptr dword ?
-	ebpptr dword ?
-	esiptr dword ?
-	ediptr dword ?
 	survptr dword 0
 	stackptr dword ?
 	exstart dword ?
 	color dword ?
+	survlength dword ?
 snapstruct ends
 
 seh struct
@@ -48,6 +41,7 @@ debugstruct struct
 	affiliation dword ?
 	afptr dword ?
 	color dword ?
+	survlength dword ?
 debugstruct ends
 
 surv_colors struct

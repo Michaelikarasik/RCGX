@@ -64,11 +64,12 @@ ProcessInfo db "File Handle: %lx ",0dh,0Ah
             db "Process Handle: %lx",0Dh,0Ah 
             db "Thread Handle: %lx",0Dh,0Ah 
             db "Image Base: %lx",0Dh,0Ah 
-            db "Start offsetess: %lx",0 
-ClassName db "SimpleWinClass",0 
-OurText  db "Win32 assembly is great and easy!",0
-
+            db "Start offsetess: %lx",0
+playerscoretext db "team a score: aaaa", 0
+arClassName db "arwinclass",0 
+guiClassName db "guiwinclass", 0
 arwc WNDCLASSEX <>
+guiwc WNDCLASSEX <>
 
 .data? 
 buffer db 512 dup(?) 
@@ -80,12 +81,15 @@ ThreadId dd ?
 align dword 
 context CONTEXT <> 
 RCGXSetupStartContext CONTEXT<>
-hInstance HINSTANCE ? 
+arHInstance HINSTANCE ? 
+guiHInstance HINSTANCE ?
 CommandLine LPSTR ?
 msg MSG<> 
 hBitmap dd ?
 hMemDC HDC ?
+hGuiDC HDC ?
 arenahwnd HWND ?
+guihwnd HWND ? 
 
 .code
 
@@ -108,7 +112,6 @@ run_debug proc
 
 		PROCESSALREADYOPENED:
 		mov isgame, 0
-
 	    mov context.ContextFlags, CONTEXT_ALL
 		mov RCGXSetupStartContext.ContextFlags, CONTEXT_CONTROL
 
@@ -325,31 +328,35 @@ run_debug proc
 	mov currentsurvlp, eax
 	mov isgame, 0
 	mov turncount, 0
-	invoke LoadBitmap,hInstance,IDB_MAIN 
-	invoke SelectObject,hMemDC,eax
+
+	.if (isdrawing)
+		invoke LoadBitmap,arHInstance,IDB_MAIN 
+		invoke SelectObject,hMemDC,eax
+	.endif
+
 	invoke ContinueDebugEvent, DBEvent.dwProcessId, DBEvent.dwThreadId,DBG_CONTINUE 
 	jmp PROCESSALREADYOPENED
 run_debug endp
 
 start: 
  invoke GetModuleHandle, NULL 
- mov    hInstance,eax 
+ mov    arHInstance,eax 
  invoke GetCommandLine 
- mov    CommandLine,eax 
- invoke WinMain, hInstance,NULL,CommandLine, SW_SHOWDEFAULT 
+ mov    CommandLine,eax
+ invoke WinMain, arHInstance,NULL,CommandLine, SW_SHOWDEFAULT
  invoke ExitProcess,eax
 
 WinMain proc hInst:HINSTANCE,hPrevInst:HINSTANCE,CmdLine:LPSTR,CmdShow:DWORD 
  mov   arwc.cbSize,SIZEOF WNDCLASSEX 
  mov   arwc.style, CS_HREDRAW or CS_VREDRAW 
- mov   arwc.lpfnWndProc, OFFSET WndProc 
+ mov   arwc.lpfnWndProc, OFFSET arWndProc 
  mov   arwc.cbClsExtra,NULL 
  mov   arwc.cbWndExtra,NULL 
- push  hInstance 
+ push  arHInstance 
  pop   arwc.hInstance 
  mov   arwc.hbrBackground,COLOR_WINDOW
  mov   arwc.lpszMenuName,NULL 
- mov   arwc.lpszClassName,OFFSET ClassName 
+ mov   arwc.lpszClassName,OFFSET arClassName 
  invoke LoadIcon,NULL,IDI_APPLICATION 
  mov   arwc.hIcon,eax 
  mov   arwc.hIconSm,eax 
@@ -358,19 +365,44 @@ WinMain proc hInst:HINSTANCE,hPrevInst:HINSTANCE,CmdLine:LPSTR,CmdShow:DWORD
 
  cmp isdrawing, 0
  jz notopeningarenawindow
-	openwindow arwc
+	openarwindow
  notopeningarenawindow:
+
+ mov   guiwc.cbSize,SIZEOF WNDCLASSEX 
+ mov   guiwc.style, CS_HREDRAW or CS_VREDRAW 
+ mov   guiwc.lpfnWndProc, OFFSET guiWndProc
+ mov   guiwc.cbClsExtra,NULL 
+ mov   guiwc.cbWndExtra,NULL 
+ push  guiHInstance 
+ pop  guiwc.hInstance 
+ mov  guiwc.hbrBackground,COLOR_WINDOW
+ mov  guiwc.lpszMenuName,NULL 
+ mov  guiwc.lpszClassName,OFFSET guiClassName 
+ invoke LoadIcon,NULL,IDI_APPLICATION 
+ mov   guiwc.hIcon,eax 
+ mov   guiwc.hIconSm,eax 
+ invoke LoadCursor,NULL,IDC_ARROW 
+ mov   guiwc.hCursor,eax 
+
+invoke RegisterClassEx, addr guiwc
+INVOKE CreateWindowEx,NULL,ADDR guiClassName,ADDR AppName,\ 
+		   WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,\ 
+		   CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,NULL,NULL,\ 
+		   guiHInstance,NULL
+mov   guihwnd,eax 
+invoke ShowWindow, guihwnd,SW_SHOWNORMAL
+invoke UpdateWindow, guihwnd
 
  invoke run_debug
  ret 
 WinMain endp
 
-WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM 
+arWndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM 
    LOCAL ps:PAINTSTRUCT 
    LOCAL hdc:HDC 
    LOCAL rect:RECT 
    .if uMsg==WM_CREATE 
-      invoke LoadBitmap,hInstance,IDB_MAIN 
+      invoke LoadBitmap,arHInstance,IDB_MAIN 
       mov hBitmap,eax 
       invoke BeginPaint,hWnd,addr ps 
 	  invoke CreateCompatibleDC,eax
@@ -390,5 +422,55 @@ WndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
  .ENDIF 
  xor eax,eax 
  ret 
-WndProc endp 
+arWndProc endp 
+
+guiWndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM 
+   LOCAL ps:PAINTSTRUCT 
+   LOCAL hdc:HDC 
+   LOCAL rect:RECT 
+   LOCAL textrect:RECT 
+   LOCAL myhbitmap:HBITMAP
+   .if uMsg==WM_CREATE 
+	  invoke BeginPaint,hWnd,addr ps 
+      mov    hdc,eax
+	  invoke GetClientRect,hWnd, ADDR textrect
+	  invoke CreateCompatibleDC,hdc
+	  mov hGuiDC, eax
+	  invoke CreateCompatibleBitmap, hdc,textrect.right, textrect.bottom
+	  invoke SelectObject,hGuiDC,eax
+	  sub textrect.bottom, 50
+	  mov eax, textrect.right
+	  xor edx, edx
+	  mov bx, 4
+	  div bx
+	  mov textrect.left, eax
+	  push 00030h ;"0\0"
+	  mov edi, esp	
+	  push 06d616574h ;"team"
+	  mov ebx, esp
+
+	  drawtextloop:
+	  add textrect.left, 100
+	  inc byte ptr [edi]
+      invoke DrawText, hGuiDC,ebx,-1, ADDR textrect, DT_SINGLELINE or DT_LEFT or DT_BOTTOM
+	  cmp byte ptr [edi], 034h
+	  jne drawtextloop
+
+	  invoke BitBlt,hdc,0,0,rect.right,rect.bottom,hGuiDC,0,0,SRCCOPY 
+   .elseif uMsg==WM_PAINT 
+	  invoke BeginPaint,hWnd,addr ps 
+      mov    hdc,eax 
+	  invoke GetClientRect,hWnd, ADDR rect
+      invoke BitBlt,hdc,0,0,rect.right,rect.bottom,hGuiDC,0,0,SRCCOPY 
+      invoke EndPaint,hWnd,addr ps 
+ .elseif uMsg==WM_DESTROY 
+  invoke DeleteObject,hBitmap 
+  invoke PostQuitMessage,NULL 
+ .ELSE 
+  invoke DefWindowProc,hWnd,uMsg,wParam,lParam 
+  ret 
+ .ENDIF 
+ xor eax,eax 
+ ret 
+guiWndProc endp 
 end start

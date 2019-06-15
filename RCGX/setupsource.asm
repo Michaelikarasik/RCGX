@@ -227,8 +227,8 @@ new_surv_loc endp
 
 write_surv macro writeloc, filename
 	mov file_handler, fopen(filename)
-	mov eax, fread(file_handler, writeloc, 512)
-	fclose file_handler 
+	mov ebx, fread(file_handler, writeloc, 512)
+	fclose file_handler
 endm
 
 thread_setup_macro macro filename1, filename2, survsnap1, survsnap2, affiliation
@@ -237,7 +237,7 @@ thread_setup_macro macro filename1, filename2, survsnap1, survsnap2, affiliation
 	invoke new_surv_loc, offset survsnap1
 	mov survsnap1.survptr, eax
 	write_surv survsnap1.survptr, filename1
-
+	mov survsnap1.survlength, ebx
 	mov eax, affiliation
 	add eax, affiliation
 	dec eax
@@ -270,7 +270,7 @@ thread_setup_macro macro filename1, filename2, survsnap1, survsnap2, affiliation
 
 	mov eax, survsnap1.survptr
 	mov esi, arptr
-	xor ecx, ecx
+	mov ecx, survsnap1.survlength
 	mov edx, survsnap1.color
 	mov ebx, affiliation
 	db 0cch
@@ -280,6 +280,7 @@ thread_setup_macro macro filename1, filename2, survsnap1, survsnap2, affiliation
 	invoke new_surv_loc, offset survsnap2
 	mov survsnap2.survptr, eax
 	write_surv survsnap2.survptr, filename2
+	mov survsnap2.survlength, ebx
 
 	mov eax, survsnap1.exstart
 	mov survsnap2.exstart, eax
@@ -296,7 +297,7 @@ thread_setup_macro macro filename1, filename2, survsnap1, survsnap2, affiliation
 
 	mov eax, survsnap2.survptr
 	mov esi, arptr
-	xor ecx, ecx
+	mov ecx, survsnap1.survlength
 	mov edx, survsnap2.color
 	mov ebx, affiliation 
 
