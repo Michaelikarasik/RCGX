@@ -1,5 +1,5 @@
 bits 32
-%define jump_gap 0x300
+%define jump_gap 0x100
 mov esi, eax
 add esi, extrasegcode
 movsd

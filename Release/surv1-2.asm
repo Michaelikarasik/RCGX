@@ -11,7 +11,7 @@ stosw
 here:
 
 extrasegexample:
-mov ebx, 0xffffffff
+mov ebx, 0xbbbbbbbb
 pop esp
 mov eax, 0xab535353
 stosd

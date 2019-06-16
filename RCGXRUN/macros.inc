@@ -125,9 +125,9 @@ UpdateMemoryChanges macro survdblp
 	jnz bigcmploop
 
 	endofbigloop:
-	getWindowMessage
 
 	notdrawing:
+	getWindowMessage
 endm
 
 finishupturn macro survdblp
@@ -496,6 +496,7 @@ endOfRoundPoints macro
 	jz SURVISDEAD2
 	div bl
 
+	;divvy up points
 	mov ecx, max_survs
 	mov edx, survlpinit
 	WINPOINTGIVELOOP:
@@ -503,10 +504,111 @@ endOfRoundPoints macro
 	cmp [edx.debugstruct].isdead, 0
 	jnz SURVISDEAD2
 	add [edx.debugstruct].wincount, eax
+	pushad
+	AddTeamScore [edx.debugstruct].affiliation, eax
+	popad
 	SURVISDEAD2:
 	add edx, sizeof debugstruct
 	test ecx, ecx
 	jnz WINPOINTGIVELOOP
+endm
+
+AddTeamScore macro affiliation, score
+	local findteamscreenposloop, foundonscreen, donwdrawing, notgoingdownline
+	push score
+	mov edx, affiliation
+	pop eax
+
+	mov ebx, offset teamscorecount
+	;add affiliation number four times
+	add ebx, edx
+	add ebx, edx
+	add ebx, edx
+	add ebx, edx
+
+	add dword ptr [ebx], eax
+
+	test edx, edx
+	jz donedrawing
+
+	dec edx
+	mov ecx, offset team_colors
+	add ecx, edx
+	add ecx, edx
+	add ecx, edx
+	add ecx, edx
+	inc edx
+
+	push [ecx]
+
+	push eax
+
+	test eax, eax
+	jz donedrawing
+	mov ecx, edx
+	mov edx, offset GuiTeamPtrs
+	mov eax, [edx] ;start of xpos of team score graphs
+	push edx
+	mov edx, [edx + 4] ;space between each graph on x axis
+
+	findteamscreenposloop:
+	dec ecx
+	test ecx, ecx
+	jz foundonscreen
+	add eax, edx ;eax holds x pos of draw start
+	jmp findteamscreenposloop
+
+	foundonscreen:
+	pop edx
+	pop ecx
+	push eax
+	push ecx
+	mov ecx, [edx + 8] 
+	mov eax, [ebx] ;eax holds score and later times to setpixel
+	xor edx, edx
+	mov ebx, GraphHeightDiv
+	div bx
+	sub ecx, eax
+	xchg edx, ecx ;edx will act as the y pos of draw start
+	sub edx, GraphToNameSpace
+	pop ecx ;ecx holds score
+
+	push edx
+	mov eax, GraphWidth ;calculate times to draw graph
+	mov ebx, GraphHeightDiv
+	xor edx, edx
+	div bx
+	xchg ebx, eax ;get times to draw graph
+	xor edx, edx
+	xchg eax, ecx
+	mul ebx
+	xchg eax, ecx ;ecx = times to draw
+
+	pop edi ;edi = ypos
+	pop ebx ;ebx = xpos
+	mov esi, ebx
+	add esi, GraphWidth
+	xchg eax, ebp
+	pop ebp ;ebp = draw color
+	push eax ;push original ebp
+
+	drawloop:
+	push ecx
+	invoke SetPixel, hGuiDC, ebx, edi, ebp
+	pop ecx
+	cmp ebx, esi
+	jl notgoingdownline
+	inc edi
+	sub ebx, GraphWidth
+	notgoingdownline:
+	inc ebx
+	loop drawloop
+
+	pop ebp
+
+	invoke InvalidateRect, guihwnd, NULL, 0
+	invoke UpdateWindow, guihwnd
+	donedrawing:
 endm
 
 check_arena_edges macro lastState, lowerEdge, higherEdge

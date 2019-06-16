@@ -66,6 +66,14 @@ all_snaps struct
 	surv8snap snapstruct<>
 all_snaps ends
 
+teamscores struct
+	team0 dword 0
+	team1 dword 0
+	team2 dword 0
+	team3 dword 0
+	team4 dword 0
+teamscores ends
+
 all_survs struct
 	surv1db debugstruct<>
 	surv2db debugstruct<>
@@ -105,10 +113,12 @@ startofallocptr dword ?
 isdrawing dword 1
 
 my_colors surv_colors<000ff0000h, 00000ff00h, 0000000ffh, 000ff5040h, 0007039d8h, 000294892h, 000583759h, 000295843h>
-
+team_colors surv_colors<000cc0000h, 00000cc00h, 0000000cch, 000cccccch>
 .data?
 
 structured_handler seh<>
+
+teamscorecount teamscores<>
 
 my_snaps all_snaps<>
 my_survs all_survs<>

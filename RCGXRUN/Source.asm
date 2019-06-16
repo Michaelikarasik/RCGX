@@ -53,6 +53,11 @@ IDB_MAIN equ 1
 
 max_turns equ 50000
 
+GraphToNameSpace equ 40
+GraphWidth equ 40
+
+GraphHeightDiv dword 2
+
 AppName db "RCGX",0 
 ofn OPENFILENAME <> 
 FilterString db "Executable Files",0,"*.exe",0 
@@ -70,6 +75,8 @@ arClassName db "arwinclass",0
 guiClassName db "guiwinclass", 0
 arwc WNDCLASSEX <>
 guiwc WNDCLASSEX <>
+
+GuiTeamPtrs dw 3 dup(0) ;1st: start of team graphs, 2nd: space between each graph, 3rd: bottom of team graph text
 
 .data? 
 buffer db 512 dup(?) 
@@ -386,7 +393,7 @@ WinMain proc hInst:HINSTANCE,hPrevInst:HINSTANCE,CmdLine:LPSTR,CmdShow:DWORD
 
 invoke RegisterClassEx, addr guiwc
 INVOKE CreateWindowEx,NULL,ADDR guiClassName,ADDR AppName,\ 
-		   WS_OVERLAPPEDWINDOW,CW_USEDEFAULT,\ 
+		   WS_OVERLAPPEDWINDOW xor WS_THICKFRAME xor WS_MAXIMIZEBOX,CW_USEDEFAULT,\ 
 		   CW_USEDEFAULT,CW_USEDEFAULT,CW_USEDEFAULT,NULL,NULL,\ 
 		   guiHInstance,NULL
 mov   guihwnd,eax 
@@ -433,22 +440,34 @@ guiWndProc proc hWnd:HWND, uMsg:UINT, wParam:WPARAM, lParam:LPARAM
    .if uMsg==WM_CREATE 
 	  invoke BeginPaint,hWnd,addr ps 
       mov    hdc,eax
+
+	  ;initialize GuiDC for later use
 	  invoke GetClientRect,hWnd, ADDR textrect
 	  invoke CreateCompatibleDC,hdc
 	  mov hGuiDC, eax
 	  invoke CreateCompatibleBitmap, hdc,textrect.right, textrect.bottom
 	  invoke SelectObject,hGuiDC,eax
 	  sub textrect.bottom, 50
+	  mov eax, textrect.bottom
+	  mov ebx, offset GuiTeamPtrs
+	  mov dword ptr [ebx + 8], eax
+	  ;center the team scores
 	  mov eax, textrect.right
 	  xor edx, edx
 	  mov bx, 4
 	  div bx
 	  add textrect.left, eax
+	  mov ebx, offset GuiTeamPtrs
+	  mov dword ptr [ebx], eax
 	  mov eax, textrect.right
 	  xor edx, edx
 	  mov bx, max_survs - 2
 	  div bx
+	  mov ebx, offset GuiTeamPtrs
+	  mov dword ptr [ebx + 4], eax
 	  mov esi, eax
+
+	  ;push team text into stack for later access
 	  push 00030h ; 0x3000 = "0\0"
 	  mov edi, esp	
 	  push 06d616574h ;"team"
